@@ -345,8 +345,7 @@ contract VotingEscrow is ReentrancyGuard {
      * @notice Record global data to checkpoint
      */
     function checkpoint() external {
-        LockedBalance memory empty = LockedBalance(0, 0);
-        _checkpoint(address(0), empty, empty);
+        _checkpoint(address(0), LockedBalance(0, 0), LockedBalance(0, 0));
     }
 
     /**
@@ -363,7 +362,7 @@ contract VotingEscrow is ReentrancyGuard {
         require(_locked.amount > 0, "No existing lock found");
         require(_locked.end > block.timestamp, "Cannot add to expired lock. Withdraw");
 
-        _deposit_for(_addr, _value, 0, locked[_addr], DEPOSIT_FOR_TYPE);
+        _deposit_for(_addr, _value, 0, _locked, DEPOSIT_FOR_TYPE);
     }
 
     /**
@@ -426,17 +425,14 @@ contract VotingEscrow is ReentrancyGuard {
         require(block.timestamp >= _locked.end, "The lock didn't expire");
         uint256 value = _locked.amount.toUint256();
 
-        LockedBalance memory old_locked = _locked;
-        _locked.end = 0;
-        _locked.amount = 0;
-        locked[msg.sender] = _locked;
+        locked[msg.sender] = LockedBalance(0, 0);
         uint256 supply_before = supply;
         supply = supply_before - value;
 
         // old_locked can have either expired <= timestamp or zero end
         // _locked has only 0 end
         // Both can have >= 0 amount
-        _checkpoint(msg.sender, old_locked, _locked);
+        _checkpoint(msg.sender, _locked, LockedBalance(0, 0));
 
         IERC20(token).safeTransfer(msg.sender, value);
 
