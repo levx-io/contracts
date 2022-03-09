@@ -63,8 +63,8 @@ contract VotingEscrow is ERC20, ReentrancyGuard {
     mapping(address => LockedBalance) public locked;
     uint256 public epoch;
 
-    Point[] public point_history; // epoch -> unsigned point
-    mapping(address => Point[]) public user_point_history; // user -> Point[user_epoch]
+    mapping(uint256 => Point) public point_history; // epoch -> unsigned point
+    mapping(address => mapping(uint256 => Point)) public user_point_history; // user -> Point[user_epoch]
     mapping(address => uint256) public user_point_epoch;
     mapping(uint256 => int128) public slope_changes; // time -> signed slope change
 
