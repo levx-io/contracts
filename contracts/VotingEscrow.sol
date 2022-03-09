@@ -205,7 +205,7 @@ contract VotingEscrow is ERC20, ReentrancyGuard {
                 u_old.bias = u_old.slope * (old_locked.end - block.timestamp).toInt128();
             }
             if (new_locked.end > block.timestamp && new_locked.amount > 0) {
-                u_new.slope - new_locked.amount / MAXTIME.toInt128();
+                u_new.slope = new_locked.amount / MAXTIME.toInt128();
                 u_new.bias = u_new.slope * (new_locked.end - block.timestamp).toInt128();
             }
 
