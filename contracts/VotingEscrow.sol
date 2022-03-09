@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.12;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -31,7 +30,7 @@ import "./libraries/Integers.sol";
 // 0 +--------+------> time
 //       maxtime (4 years?)
 
-contract VotingEscrow is ERC20, ReentrancyGuard {
+contract VotingEscrow is ReentrancyGuard {
     using SafeERC20 for IERC20;
     using Integers for int128;
     using Integers for uint256;
@@ -58,7 +57,6 @@ contract VotingEscrow is ERC20, ReentrancyGuard {
     uint256 public constant MULTIPLIER = 10**18;
 
     address public immutable token;
-    uint8 private immutable _decimals;
     uint256 public supply;
     mapping(address => LockedBalance) public locked;
     uint256 public epoch;
@@ -67,6 +65,10 @@ contract VotingEscrow is ERC20, ReentrancyGuard {
     mapping(address => mapping(uint256 => Point)) public user_point_history; // user -> Point[user_epoch]
     mapping(address => uint256) public user_point_epoch;
     mapping(uint256 => int128) public slope_changes; // time -> signed slope change
+
+    string public name;
+    string public symbol;
+    uint8 public immutable decimals;
 
     // Checker for whitelisted (smart contract) wallets which are allowed to deposit
     // The goal is to prevent tokenizing the escrow
@@ -84,19 +86,18 @@ contract VotingEscrow is ERC20, ReentrancyGuard {
 
     constructor(
         address token_addr,
-        string memory name_,
-        string memory symbol_
-    ) ERC20(name_, symbol_) {
+        string memory _name,
+        string memory _symbol
+    ) {
         admin = msg.sender;
         token = token_addr;
 
         point_history[0].blk = block.number;
         point_history[0].ts = block.timestamp;
-        _decimals = IERC20Metadata(token_addr).decimals();
-    }
 
-    function decimals() public view override returns (uint8) {
-        return _decimals;
+        name = _name;
+        symbol = _symbol;
+        decimals = IERC20Metadata(token_addr).decimals();
     }
 
     /**
@@ -465,6 +466,10 @@ contract VotingEscrow is ERC20, ReentrancyGuard {
         return _min;
     }
 
+    function balanceOf(address addr) public view returns (uint256) {
+        return balanceOf(addr, block.timestamp);
+    }
+
     /**
      * @notice Get the current voting power for `msg.sender`
      * @dev Adheres to the ERC20 `balanceOf` interface for Aragon compatibility
@@ -472,8 +477,7 @@ contract VotingEscrow is ERC20, ReentrancyGuard {
      * @param _t Epoch time to return voting power at
      * @return User voting power
      */
-    function balanceOf(address addr, uint256 _t) external view returns (uint256) {
-        if (_t == 0) _t = block.timestamp;
+    function balanceOf(address addr, uint256 _t) public view returns (uint256) {
         uint256 _epoch = user_point_epoch[addr];
         if (_epoch == 0) return 0;
         else {
@@ -553,13 +557,16 @@ contract VotingEscrow is ERC20, ReentrancyGuard {
         return last_point.bias.toUint256();
     }
 
+    function totalSupply() public view returns (uint256) {
+        return totalSupply(block.timestamp);
+    }
+
     /**
      * @notice Calculate total voting power
      * @dev Adheres to the ERC20 `totalSupply` interface for Aragon compatibility
      * @return Total voting power
      */
-    function totalSupply(uint256 t) external view returns (uint256) {
-        if (t == 0) t = block.timestamp;
+    function totalSupply(uint256 t) public view returns (uint256) {
         uint256 _epoch = epoch;
         Point memory last_point = point_history[_epoch];
         return supply_at(last_point, t);
