@@ -105,7 +105,7 @@ contract VotingEscrow is ReentrancyGuard {
      * @param addr Address to have ownership transferred to
      */
     function commit_transfer_ownership(address addr) external {
-        require(msg.sender == admin); // dev: admin only
+        require(msg.sender == admin, "dev: admin only");
         future_admin = addr;
         emit CommitOwnership(addr);
     }
@@ -114,7 +114,7 @@ contract VotingEscrow is ReentrancyGuard {
      * @notice Apply ownership transfer
      */
     function apply_transfer_ownership() external {
-        require(msg.sender == admin); // dev: admin only
+        require(msg.sender == admin, "dev: admin only");
         address _admin = future_admin;
         require(_admin != address(0));
         admin = _admin;
@@ -311,19 +311,21 @@ contract VotingEscrow is ReentrancyGuard {
      * @param _addr User's wallet address
      * @param _value Amount to deposit
      * @param unlock_time New time when to unlock the tokens, or 0 if unchanged
-     * @param _locked Previous locked amount / timestamp
+     * @param locked_balance Previous locked amount / timestamp
      */
     function _deposit_for(
         address _addr,
         uint256 _value,
         uint256 unlock_time,
-        LockedBalance memory _locked,
+        LockedBalance memory locked_balance,
         int128 _type
     ) internal {
+        LockedBalance memory _locked = locked_balance;
         uint256 supply_before = supply;
 
         supply = supply_before + _value;
-        LockedBalance memory old_locked = _locked;
+        LockedBalance memory old_locked;
+        (old_locked.amount, old_locked.end) = (_locked.amount, _locked.end);
         // Adding to existing lock, or if a lock is expired - creating a new one
         _locked.amount += (_value).toInt128();
         if (unlock_time != 0) _locked.end = unlock_time;
@@ -358,7 +360,7 @@ contract VotingEscrow is ReentrancyGuard {
     function deposit_for(address _addr, uint256 _value) external nonReentrant {
         LockedBalance memory _locked = locked[_addr];
 
-        require(_value > 0); // dev: need non-zero value
+        require(_value > 0, "dev: need non-zero value");
         require(_locked.amount > 0, "No existing lock found");
         require(_locked.end > block.timestamp, "Cannot add to expired lock. Withdraw");
 
@@ -375,7 +377,7 @@ contract VotingEscrow is ReentrancyGuard {
         uint256 unlock_time = (_unlock_time / WEEK) * WEEK; // Locktime is rounded down to weeks
         LockedBalance memory _locked = locked[msg.sender];
 
-        require(_value > 0); // dev: need non-zero value
+        require(_value > 0, "dev: need non-zero value");
         require(_locked.amount == 0, "Withdraw old tokens first");
         require(unlock_time > block.timestamp, "Can only lock until time in the future");
         require(unlock_time <= block.timestamp + MAXTIME, "Voting lock can be 4 years max");
@@ -392,7 +394,7 @@ contract VotingEscrow is ReentrancyGuard {
         assert_not_contract(msg.sender);
         LockedBalance memory _locked = locked[msg.sender];
 
-        require(_value > 0); // dev: need non-zero value
+        require(_value > 0, "dev: need non-zero value");
         require(_locked.amount > 0, "No existing lock found");
         require(_locked.end > block.timestamp, "Cannot add to expired lock. Withdraw");
 
@@ -425,14 +427,18 @@ contract VotingEscrow is ReentrancyGuard {
         require(block.timestamp >= _locked.end, "The lock didn't expire");
         uint256 value = _locked.amount.toUint256();
 
-        locked[msg.sender] = LockedBalance(0, 0);
+        LockedBalance memory old_locked;
+        (old_locked.amount, old_locked.end) = (_locked.amount, _locked.end);
+        _locked.end = 0;
+        _locked.amount = 0;
+        locked[msg.sender] = _locked;
         uint256 supply_before = supply;
         supply = supply_before - value;
 
         // old_locked can have either expired <= timestamp or zero end
         // _locked has only 0 end
         // Both can have >= 0 amount
-        _checkpoint(msg.sender, _locked, LockedBalance(0, 0));
+        _checkpoint(msg.sender, old_locked, _locked);
 
         IERC20(token).safeTransfer(msg.sender, value);
 
@@ -522,7 +528,7 @@ contract VotingEscrow is ReentrancyGuard {
             d_t = block.timestamp - point_0.ts;
         }
         uint256 block_time = point_0.ts;
-        if (d_block != 0) block_time += (d_t * (_block - point_0.blk)) / d_block;
+        if (d_block != 0) block_time += ((d_t * (_block - point_0.blk)) / d_block);
 
         upoint.bias -= upoint.slope * (block_time - upoint.ts).toInt128();
         if (upoint.bias >= 0) return upoint.bias.toUint256();

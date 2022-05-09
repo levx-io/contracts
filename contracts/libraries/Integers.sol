@@ -3,10 +3,10 @@ pragma solidity 0.8.12;
 
 library Integers {
     function toInt128(uint256 u) internal pure returns (int128) {
-        return int128(uint128(u));
+        return int128(int256(u));
     }
 
     function toUint256(int128 i) internal pure returns (uint256) {
-        return uint256(int256(i));
+        return uint256(uint128(i));
     }
 }
