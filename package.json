@@ -35,9 +35,9 @@
     "moonbase:export": "hardhat --network moonbase export --export exports/moonbase.json",
     "arbitrum:deploy": "hardhat --network arbitrum deploy",
     "arbitrum:export": "hardhat --network arbitrum export --export exports/arbitrum.json",
-    "test": "cross-env TS_NODE_TRANSPILE_ONLY=1 hardhat test",
-    "test:coverage": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" hardhat coverage",
-    "test:gas": "cross-env REPORT_GAS=true yarn test"
+    "test": "brownie test",
+    "test:coverage": "brownie test --coverage",
+    "test:gas": "brownie test --gas"
   },
   "lint-staged": {
     "*.ts": [
@@ -72,7 +72,7 @@
     "eslint": "^7.20.0",
     "ethereum-waffle": "^3.3.0",
     "ethers": "^5.3.0",
-    "hardhat": "^2.6.7",
+    "hardhat": "^2.9.3",
     "hardhat-deploy": "^0.8.6",
     "hardhat-deploy-ethers": "^0.3.0-beta.10",
     "hardhat-gas-reporter": "^1.0.0",
