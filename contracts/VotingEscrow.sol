@@ -13,7 +13,7 @@ import "./libraries/Integers.sol";
  * @notice Votes have a weight depending on time, so that users are
  *         committed to the future of (whatever they are voting for)
  * @dev Vote weight decays linearly over time. Lock time cannot be
- *      more than `MAXTIME` (4 years).
+ *      more than `MAXTIME`.
  * @dev Ported from vyper (https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/VotingEscrow.vy)
  */
 
@@ -28,7 +28,7 @@ import "./libraries/Integers.sol";
 //   |  /
 //   |/
 // 0 +--------+------> time
-//       maxtime (4 years?)
+//       maxtime
 
 contract VotingEscrow is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -112,7 +112,7 @@ contract VotingEscrow is ReentrancyGuard {
      * @param addr Address to have ownership transferred to
      */
     function commit_transfer_ownership(address addr) external {
-        require(msg.sender == admin, "dev: admin only");
+        require(msg.sender == admin, "VE: FORBIDDEN");
         future_admin = addr;
         emit CommitOwnership(addr);
     }
@@ -121,9 +121,9 @@ contract VotingEscrow is ReentrancyGuard {
      * @notice Apply ownership transfer
      */
     function apply_transfer_ownership() external {
-        require(msg.sender == admin, "dev: admin only");
+        require(msg.sender == admin, "VE: FORBIDDEN");
         address _admin = future_admin;
-        require(_admin != address(0));
+        require(_admin != address(0), "VE: NOT_COMMITTED");
         admin = _admin;
         emit ApplyOwnership(_admin);
     }
@@ -133,7 +133,7 @@ contract VotingEscrow is ReentrancyGuard {
      * @param addr Address of Smart contract checker
      */
     function commit_smart_wallet_checker(address addr) external {
-        require(msg.sender == admin);
+        require(msg.sender == admin, "VE: FORBIDDEN");
         future_smart_wallet_checker = addr;
     }
 
@@ -141,7 +141,7 @@ contract VotingEscrow is ReentrancyGuard {
      * @notice Apply setting external contract to check approved smart contract wallets
      */
     function apply_smart_wallet_checker() external {
-        require(msg.sender == admin);
+        require(msg.sender == admin, "VE: FORBIDDEN");
         smart_wallet_checker = future_smart_wallet_checker;
     }
 
@@ -155,7 +155,7 @@ contract VotingEscrow is ReentrancyGuard {
             if (checker != address(0)) {
                 if (ISmartWalletChecker(checker).check(addr)) return;
             }
-            revert("Smart contract depositors not allowed");
+            revert("VE: CONTRACT_NOT_WHITELISTED");
         }
     }
 
@@ -367,9 +367,9 @@ contract VotingEscrow is ReentrancyGuard {
     function deposit_for(address _addr, uint256 _value) external nonReentrant {
         LockedBalance memory _locked = locked[_addr];
 
-        require(_value > 0, "dev: need non-zero value");
-        require(_locked.amount > 0, "No existing lock found");
-        require(_locked.end > block.timestamp, "Cannot add to expired lock. Withdraw");
+        require(_value > 0, "VE: INVALID_VALUE");
+        require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
+        require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
 
         _deposit_for(_addr, _value, 0, _locked, DEPOSIT_FOR_TYPE);
     }
@@ -384,10 +384,10 @@ contract VotingEscrow is ReentrancyGuard {
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to weeks
         LockedBalance memory _locked = locked[msg.sender];
 
-        require(_value > 0, "dev: need non-zero value");
-        require(_locked.amount == 0, "Withdraw old tokens first");
-        require(unlock_time > block.timestamp, "Can only lock until time in the future");
-        require(unlock_time <= block.timestamp + maxtime, "Voting lock can be 4 years max");
+        require(_value > 0, "VE: INVALID_VALUE");
+        require(_locked.amount == 0, "VE: EXISTING_LOCK_FOUND");
+        require(unlock_time > block.timestamp, "VE: UNLOCK_TIME_TOO_EARLY");
+        require(unlock_time <= block.timestamp + maxtime, "VE: UNLOCK_TIME_TOO_LATE");
 
         _deposit_for(msg.sender, _value, unlock_time, _locked, CRETE_LOCK_TYPE);
     }
@@ -401,9 +401,9 @@ contract VotingEscrow is ReentrancyGuard {
         assert_not_contract(msg.sender);
         LockedBalance memory _locked = locked[msg.sender];
 
-        require(_value > 0, "dev: need non-zero value");
-        require(_locked.amount > 0, "No existing lock found");
-        require(_locked.end > block.timestamp, "Cannot add to expired lock. Withdraw");
+        require(_value > 0, "VE: INVALID_VALUE");
+        require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
+        require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
 
         _deposit_for(msg.sender, _value, 0, _locked, INCREASE_LOCK_AMOUNT);
     }
@@ -417,10 +417,10 @@ contract VotingEscrow is ReentrancyGuard {
         LockedBalance memory _locked = locked[msg.sender];
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to weeks
 
-        require(_locked.end > block.timestamp, "Lock expired");
-        require(_locked.amount > 0, "Nothing is locked");
-        require(unlock_time > _locked.end, "Can only increase lock duration");
-        require(unlock_time <= block.timestamp + maxtime, "Voting lock can be 4 years max");
+        require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
+        require(_locked.amount > 0, "VE: LOCK_AMOUNT_TOO_LOW");
+        require(unlock_time > _locked.end, "VE: UNLOCK_TIME_TOO_EARLY");
+        require(unlock_time <= block.timestamp + maxtime, "VE: UNLOCK_TIME_TOO_LATE");
 
         _deposit_for(msg.sender, 0, unlock_time, _locked, INCREASE_UNLOCK_TIME);
     }
@@ -431,7 +431,7 @@ contract VotingEscrow is ReentrancyGuard {
      */
     function withdraw() external nonReentrant {
         LockedBalance memory _locked = locked[msg.sender];
-        require(block.timestamp >= _locked.end, "The lock didn't expire");
+        require(block.timestamp >= _locked.end, "VE: LOCK_NOT_EXPIRED");
         uint256 value = _locked.amount.toUint256();
 
         locked[msg.sender] = LockedBalance(0, 0);
