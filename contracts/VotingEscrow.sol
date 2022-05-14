@@ -52,9 +52,9 @@ contract VotingEscrow is ReentrancyGuard {
     int128 public constant INCREASE_LOCK_AMOUNT = 2;
     int128 public constant INCREASE_UNLOCK_TIME = 3;
 
-    uint256 public constant WEEK = 7 days;
-    uint256 public constant MAXTIME = 4 * 365 days;
-    uint256 public constant MULTIPLIER = 10**18;
+    uint256 public immutable interval;
+    uint256 public immutable maxtime;
+    uint256 public immutable multiplier;
 
     address public immutable token;
     uint256 public supply;
@@ -87,7 +87,10 @@ contract VotingEscrow is ReentrancyGuard {
     constructor(
         address token_addr,
         string memory _name,
-        string memory _symbol
+        string memory _symbol,
+        uint256 _interval,
+        uint256 _maxtime,
+        uint256 _multiplier
     ) {
         admin = msg.sender;
         token = token_addr;
@@ -98,6 +101,10 @@ contract VotingEscrow is ReentrancyGuard {
         name = _name;
         symbol = _symbol;
         decimals = IERC20Metadata(token_addr).decimals();
+
+        interval = _interval;
+        maxtime = _maxtime;
+        multiplier = _multiplier;
     }
 
     /**
@@ -202,11 +209,11 @@ contract VotingEscrow is ReentrancyGuard {
             // Calculate slopes and biases
             // Kept at zero when they have to
             if (old_locked.end > block.timestamp && old_locked.amount > 0) {
-                u_old.slope = old_locked.amount / MAXTIME.toInt128();
+                u_old.slope = old_locked.amount / maxtime.toInt128();
                 u_old.bias = u_old.slope * (old_locked.end - block.timestamp).toInt128();
             }
             if (new_locked.end > block.timestamp && new_locked.amount > 0) {
-                u_new.slope = new_locked.amount / MAXTIME.toInt128();
+                u_new.slope = new_locked.amount / maxtime.toInt128();
                 u_new.bias = u_new.slope * (new_locked.end - block.timestamp).toInt128();
             }
 
@@ -229,17 +236,17 @@ contract VotingEscrow is ReentrancyGuard {
         Point memory initial_last_point = Point(last_point.bias, last_point.slope, last_point.ts, last_point.blk);
         uint256 block_slope; // dblock/dt
         if (block.timestamp > last_point.ts)
-            block_slope = (MULTIPLIER * (block.number - last_point.blk)) / (block.timestamp - last_point.ts);
+            block_slope = (multiplier * (block.number - last_point.blk)) / (block.timestamp - last_point.ts);
         // If last point is already recorded in this block, slope=0
         // But that's ok b/c we know the block in such case
 
         {
             // Go over weeks to fill history and calculate what the current point is
-            uint256 t_i = (last_checkpoint / WEEK) * WEEK;
+            uint256 t_i = (last_checkpoint / interval) * interval;
             for (uint256 i; i < 255; i++) {
                 // Hopefully it won't happen that this won't get used in 5 years!
                 // If it does, users will be able to withdraw but vote weight will be broken
-                t_i += WEEK;
+                t_i += interval;
                 int128 d_slope;
                 if (t_i > block.timestamp) t_i = block.timestamp;
                 else d_slope = slope_changes[t_i];
@@ -253,7 +260,7 @@ contract VotingEscrow is ReentrancyGuard {
                     last_point.slope = 0;
                 last_checkpoint = t_i;
                 last_point.ts = t_i;
-                last_point.blk = initial_last_point.blk + (block_slope * (t_i - initial_last_point.ts)) / MULTIPLIER;
+                last_point.blk = initial_last_point.blk + (block_slope * (t_i - initial_last_point.ts)) / multiplier;
                 _epoch += 1;
                 if (t_i == block.timestamp) {
                     last_point.blk = block.number;
@@ -374,13 +381,13 @@ contract VotingEscrow is ReentrancyGuard {
      */
     function create_lock(uint256 _value, uint256 _unlock_time) external nonReentrant {
         assert_not_contract(msg.sender);
-        uint256 unlock_time = (_unlock_time / WEEK) * WEEK; // Locktime is rounded down to weeks
+        uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to weeks
         LockedBalance memory _locked = locked[msg.sender];
 
         require(_value > 0, "dev: need non-zero value");
         require(_locked.amount == 0, "Withdraw old tokens first");
         require(unlock_time > block.timestamp, "Can only lock until time in the future");
-        require(unlock_time <= block.timestamp + MAXTIME, "Voting lock can be 4 years max");
+        require(unlock_time <= block.timestamp + maxtime, "Voting lock can be 4 years max");
 
         _deposit_for(msg.sender, _value, unlock_time, _locked, CRETE_LOCK_TYPE);
     }
@@ -408,12 +415,12 @@ contract VotingEscrow is ReentrancyGuard {
     function increase_unlock_time(uint256 _unlock_time) external nonReentrant {
         assert_not_contract(msg.sender);
         LockedBalance memory _locked = locked[msg.sender];
-        uint256 unlock_time = (_unlock_time / WEEK) * WEEK; // Locktime is rounded down to weeks
+        uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to weeks
 
         require(_locked.end > block.timestamp, "Lock expired");
         require(_locked.amount > 0, "Nothing is locked");
         require(unlock_time > _locked.end, "Can only increase lock duration");
-        require(unlock_time <= block.timestamp + MAXTIME, "Voting lock can be 4 years max");
+        require(unlock_time <= block.timestamp + maxtime, "Voting lock can be 4 years max");
 
         _deposit_for(msg.sender, 0, unlock_time, _locked, INCREASE_UNLOCK_TIME);
     }
@@ -539,9 +546,9 @@ contract VotingEscrow is ReentrancyGuard {
      */
     function supply_at(Point memory point, uint256 t) internal view returns (uint256) {
         Point memory last_point = point;
-        uint256 t_i = (last_point.ts / WEEK) * WEEK;
+        uint256 t_i = (last_point.ts / interval) * interval;
         for (uint256 i; i < 255; i++) {
-            t_i += WEEK;
+            t_i += interval;
             int128 d_slope;
             if (t_i > t) t_i = t;
             else d_slope = slope_changes[t_i];

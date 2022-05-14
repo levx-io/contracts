@@ -18,6 +18,10 @@ INITIAL_RATE = 274_815_283
 YEAR_1_SUPPLY = INITIAL_RATE * 10 ** 18 // YEAR * YEAR
 INITIAL_SUPPLY = 1_303_030_303
 
+DAY = 86400
+NUMBER_OF_DAYS = 3
+INTERVAL = NUMBER_OF_DAYS * DAY
+MAXTIME = 2 * 365 * DAY
 
 def approx(a, b, precision=1e-10):
     if a == b == 0:
@@ -89,7 +93,7 @@ def token(ERC20Mock, accounts):
 @pytest.fixture(scope="module")
 def voting_escrow(VotingEscrow, accounts, token):
     yield VotingEscrow.deploy(
-        token, "Voting-escrowed CRV", "veCRV", {"from": accounts[0]}
+        token, "Voting-escrowed CRV", "veCRV", INTERVAL, MAXTIME, 10 ** 18, {"from": accounts[0]}
     )
 
 

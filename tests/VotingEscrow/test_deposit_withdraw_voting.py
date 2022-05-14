@@ -3,10 +3,11 @@ from brownie import chain, history
 from brownie.test import strategy
 from brownie_tokens import ERC20
 
-WEEK = 86400 * 7
-MAX_TIME = 86400 * 365 * 4
+DAY = 86400
+NUMBER_OF_DAYS = 3
+INTERVAL = NUMBER_OF_DAYS * DAY
+MAXTIME = 2 * 365 * DAY
 GAS_LIMIT = 4_000_000
-
 
 class StateMachine:
 
@@ -36,7 +37,7 @@ class StateMachine:
         self.voting_balances = {i: {"value": 0, "unlock_time": 0} for i in self.accounts}
 
     def rule_create_lock(self, st_account, st_value, st_lock_duration):
-        unlock_time = (chain.time() + st_lock_duration * WEEK) // WEEK * WEEK
+        unlock_time = (chain.time() + st_lock_duration * INTERVAL) // INTERVAL * INTERVAL
 
         if st_value == 0:
             with brownie.reverts("dev: need non-zero value"):
@@ -89,7 +90,7 @@ class StateMachine:
             self.voting_balances[st_account]["value"] += st_value
 
     def rule_increase_unlock_time(self, st_account, st_lock_duration):
-        unlock_time = (chain.time() + st_lock_duration * WEEK) // WEEK * WEEK
+        unlock_time = (chain.time() + st_lock_duration * INTERVAL) // INTERVAL * INTERVAL
 
         if self.voting_balances[st_account]["unlock_time"] <= chain.time():
             with brownie.reverts("Lock expired"):
@@ -142,7 +143,7 @@ class StateMachine:
         """
         Advance the clock.
         """
-        chain.sleep(st_sleep_duration * WEEK)
+        chain.sleep(st_sleep_duration * INTERVAL)
 
         # check the balance as a transaction, to ensure a block is mined after time travel
         self.token.balanceOf.transact(self.accounts[0], {"from": self.accounts[0]})
@@ -167,7 +168,7 @@ class StateMachine:
             balance = self.voting_escrow.balanceOf(acct)
             total_supply += balance
 
-            if data["unlock_time"] > timestamp and data["value"] // MAX_TIME > 0:
+            if data["unlock_time"] > timestamp and data["value"] // MAXTIME > 0:
                 assert balance
             elif not data["value"] or data["unlock_time"] <= timestamp:
                 assert not balance
@@ -189,8 +190,8 @@ class StateMachine:
 
 def test_state_machine(state_machine, accounts, VotingEscrow):
     token = ERC20("", "", 18)
-    voting_escrow = VotingEscrow.deploy(
-        token, "Voting-escrowed CRV", "veCRV", {"from": accounts[0]}
+    yield VotingEscrow.deploy(
+        token, "Voting-escrowed CRV", "veCRV", INTERVAL, MAXTIME, 10 ** 18, {"from": accounts[0]}
     )
 
     state_machine(StateMachine, accounts[:10], token, voting_escrow, settings={"max_examples": 30})
