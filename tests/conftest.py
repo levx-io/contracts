@@ -82,8 +82,8 @@ def receiver(accounts):
 
 
 @pytest.fixture(scope="module")
-def token(ERC20CRV, accounts):
-    yield ERC20CRV.deploy("Curve DAO Token", "CRV", 18, {"from": accounts[0]})
+def token(ERC20Mock, accounts):
+    yield ERC20Mock.deploy("Curve DAO Token", "CRV", 10000 * 10 ** 18, {"from": accounts[0]})
 
 
 @pytest.fixture(scope="module")
