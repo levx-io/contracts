@@ -226,7 +226,7 @@ contract VotingEscrow is ReentrancyGuard {
         // initial_last_point is used for extrapolation to calculate block number
         // (approximately, for *At methods) and save them
         // as we cannot figure that out exactly from inside the contract
-        Point memory initial_last_point = last_point;
+        Point memory initial_last_point = Point(last_point.bias, last_point.slope, last_point.ts, last_point.blk);
         uint256 block_slope; // dblock/dt
         if (block.timestamp > last_point.ts)
             block_slope = (MULTIPLIER * (block.number - last_point.blk)) / (block.timestamp - last_point.ts);
@@ -427,18 +427,14 @@ contract VotingEscrow is ReentrancyGuard {
         require(block.timestamp >= _locked.end, "The lock didn't expire");
         uint256 value = _locked.amount.toUint256();
 
-        LockedBalance memory old_locked;
-        (old_locked.amount, old_locked.end) = (_locked.amount, _locked.end);
-        _locked.end = 0;
-        _locked.amount = 0;
-        locked[msg.sender] = _locked;
+        locked[msg.sender] = LockedBalance(0, 0);
         uint256 supply_before = supply;
         supply = supply_before - value;
 
         // old_locked can have either expired <= timestamp or zero end
         // _locked has only 0 end
         // Both can have >= 0 amount
-        _checkpoint(msg.sender, old_locked, _locked);
+        _checkpoint(msg.sender, _locked, LockedBalance(0, 0));
 
         IERC20(token).safeTransfer(msg.sender, value);
 
@@ -580,7 +576,7 @@ contract VotingEscrow is ReentrancyGuard {
      * @return Total voting power at `_block`
      */
     function totalSupplyAt(uint256 _block) external view returns (uint256) {
-        require(_block < block.number);
+        require(_block <= block.number);
         uint256 _epoch = epoch;
         uint256 target_epoch = find_block_epoch(_block, _epoch);
 
