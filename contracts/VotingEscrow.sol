@@ -129,7 +129,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @param _idx User epoch number
      * @return Epoch time of the checkpoint
      */
-    function checkpointTime(address _addr, uint256 _idx) external view returns (uint256) {
+    function getCheckpointTime(address _addr, uint256 _idx) external view returns (uint256) {
         return userPointHistory[_addr][_idx].ts;
     }
 
@@ -500,7 +500,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @param t Time to calculate the total voting power at
      * @return Total voting power at that time
      */
-    function supply_at(Point memory point, uint256 t) internal view returns (uint256) {
+    function _supplyAt(Point memory point, uint256 t) internal view returns (uint256) {
         Point memory last_point = point;
         uint256 t_i = (last_point.ts / interval) * interval;
         for (uint256 i; i < 255; i++) {
@@ -530,7 +530,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
     function totalSupply(uint256 t) public view returns (uint256) {
         uint256 _epoch = epoch;
         Point memory last_point = pointHistory[_epoch];
-        return supply_at(last_point, t);
+        return _supplyAt(last_point, t);
     }
 
     /**
@@ -553,6 +553,6 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
             dt = ((_block - point.blk) * (block.timestamp - point.ts)) / (block.number - point.blk);
         // Now dt contains info on how far are we beyond point
 
-        return supply_at(point, point.ts + dt);
+        return _supplyAt(point, point.ts + dt);
     }
 }
