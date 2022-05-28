@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.12;
 
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "./interfaces/ISmartWalletChecker.sol";
 import "./libraries/Integers.sol";
 
 /**
@@ -30,7 +30,7 @@ import "./libraries/Integers.sol";
 // 0 +--------+------> time
 //       maxtime
 
-contract VotingEscrow is ReentrancyGuard {
+contract VotingEscrow is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using Integers for int128;
     using Integers for uint256;
@@ -55,8 +55,13 @@ contract VotingEscrow is ReentrancyGuard {
     uint256 public immutable interval;
     uint256 public immutable maxtime;
     uint256 public immutable multiplier;
-
     address public immutable token;
+    string public name;
+    string public symbol;
+    uint8 public immutable decimals;
+
+    mapping(address => bool) public whitelisted;
+
     uint256 public supply;
     mapping(address => LockedBalance) public locked;
     uint256 public epoch;
@@ -66,20 +71,7 @@ contract VotingEscrow is ReentrancyGuard {
     mapping(address => uint256) public user_point_epoch;
     mapping(uint256 => int128) public slope_changes; // time -> signed slope change
 
-    string public name;
-    string public symbol;
-    uint8 public immutable decimals;
-
-    // Checker for whitelisted (smart contract) wallets which are allowed to deposit
-    // The goal is to prevent tokenizing the escrow
-    address public future_smart_wallet_checker;
-    address public smart_wallet_checker;
-
-    address public admin; // Can and will be a smart contract
-    address public future_admin;
-
-    event CommitOwnership(address admin);
-    event ApplyOwnership(address admin);
+    event SetWhitelisted(address indexed account, bool whitelisted);
     event Deposit(address indexed provider, uint256 value, uint256 indexed locktime, int128 _type, uint256 ts);
     event Withdraw(address indexed provider, uint256 value, uint256 ts);
     event Supply(uint256 prevSupply, uint256 supply);
@@ -92,12 +84,7 @@ contract VotingEscrow is ReentrancyGuard {
         uint256 _maxtime,
         uint256 _multiplier
     ) {
-        admin = msg.sender;
         token = token_addr;
-
-        point_history[0].blk = block.number;
-        point_history[0].ts = block.timestamp;
-
         name = _name;
         symbol = _symbol;
         decimals = IERC20Metadata(token_addr).decimals();
@@ -105,58 +92,25 @@ contract VotingEscrow is ReentrancyGuard {
         interval = _interval;
         maxtime = _maxtime;
         multiplier = _multiplier;
+
+        point_history[0].blk = block.number;
+        point_history[0].ts = block.timestamp;
     }
 
     /**
-     * @notice Transfer ownership of VotingEscrow contract to `addr`
-     * @param addr Address to have ownership transferred to
+     * @notice Check if the call is from an EOA or a whitelisted smart contract, revert if not
      */
-    function commit_transfer_ownership(address addr) external {
-        require(msg.sender == admin, "VE: FORBIDDEN");
-        future_admin = addr;
-        emit CommitOwnership(addr);
-    }
-
-    /**
-     * @notice Apply ownership transfer
-     */
-    function apply_transfer_ownership() external {
-        require(msg.sender == admin, "VE: FORBIDDEN");
-        address _admin = future_admin;
-        require(_admin != address(0), "VE: NOT_COMMITTED");
-        admin = _admin;
-        emit ApplyOwnership(_admin);
-    }
-
-    /**
-     * @notice Set an external contract to check for approved smart contract wallets
-     * @param addr Address of Smart contract checker
-     */
-    function commit_smart_wallet_checker(address addr) external {
-        require(msg.sender == admin, "VE: FORBIDDEN");
-        future_smart_wallet_checker = addr;
-    }
-
-    /**
-     * @notice Apply setting external contract to check approved smart contract wallets
-     */
-    function apply_smart_wallet_checker() external {
-        require(msg.sender == admin, "VE: FORBIDDEN");
-        smart_wallet_checker = future_smart_wallet_checker;
-    }
-
-    /**
-     * @notice Check if the call is from a whitelisted smart contract, revert if not
-     * @param addr Address to be checked
-     */
-    function assert_not_contract(address addr) internal {
-        if (addr != tx.origin) {
-            address checker = smart_wallet_checker;
-            if (checker != address(0)) {
-                if (ISmartWalletChecker(checker).check(addr)) return;
-            }
-            revert("VE: CONTRACT_NOT_WHITELISTED");
+    modifier authorized {
+        if (msg.sender != tx.origin) {
+            require(whitelisted[msg.sender], "VE: CONTRACT_NOT_WHITELISTED");
         }
+        _;
+    }
+
+    function setWhitelisted(address account, bool _whitelisted) external onlyOwner {
+        whitelisted[account] = _whitelisted;
+
+        emit SetWhitelisted(account, _whitelisted);
     }
 
     /**
@@ -379,8 +333,7 @@ contract VotingEscrow is ReentrancyGuard {
      * @param _value Amount to deposit
      * @param _unlock_time Epoch time when tokens unlock, rounded down to whole weeks
      */
-    function create_lock(uint256 _value, uint256 _unlock_time) external nonReentrant {
-        assert_not_contract(msg.sender);
+    function create_lock(uint256 _value, uint256 _unlock_time) external nonReentrant authorized {
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to weeks
         LockedBalance memory _locked = locked[msg.sender];
 
@@ -397,8 +350,7 @@ contract VotingEscrow is ReentrancyGuard {
      *          without modifying the unlock time
      * @param _value Amount of tokens to deposit and add to the lock
      */
-    function increase_amount(uint256 _value) external nonReentrant {
-        assert_not_contract(msg.sender);
+    function increase_amount(uint256 _value) external nonReentrant authorized {
         LockedBalance memory _locked = locked[msg.sender];
 
         require(_value > 0, "VE: INVALID_VALUE");
@@ -412,10 +364,14 @@ contract VotingEscrow is ReentrancyGuard {
      * @notice Extend the unlock time for `msg.sender` to `_unlock_time`
      * @param _unlock_time New epoch time for unlocking
      */
-    function increase_unlock_time(uint256 _unlock_time) external nonReentrant {
-        assert_not_contract(msg.sender);
+    function increase_unlock_time(uint256 _unlock_time) external nonReentrant authorized {
         LockedBalance memory _locked = locked[msg.sender];
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to weeks
+
+        // TODO: is it fair to increase the time?
+        // So if user 1 gets 1000 $THANOS and the price increases dramatically in 3 months user 1 can keep extending
+        // their lock period for the price they initially provided liquidity at or will it get reevaluated based on the
+        // new $LEVX price?
 
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
         require(_locked.amount > 0, "VE: LOCK_AMOUNT_TOO_LOW");
