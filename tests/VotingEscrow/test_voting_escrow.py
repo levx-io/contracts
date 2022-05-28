@@ -56,7 +56,7 @@ def test_voting_powers(web3, chain, accounts, token, voting_escrow):
 
     stages["before_deposits"] = (web3.eth.blockNumber, chain[-1].timestamp)
 
-    voting_escrow.create_lock(amount, chain[-1].timestamp + INTERVAL, {"from": alice})
+    voting_escrow.createLock(amount, chain[-1].timestamp + INTERVAL, {"from": alice})
     stages["alice_deposit"] = (web3.eth.blockNumber, chain[-1].timestamp)
 
     chain.sleep(H)
@@ -103,14 +103,14 @@ def test_voting_powers(web3, chain, accounts, token, voting_escrow):
     chain.sleep((chain[-1].timestamp // INTERVAL + 1) * INTERVAL - chain[-1].timestamp)
     chain.mine()
 
-    voting_escrow.create_lock(amount, chain[-1].timestamp + 2 * INTERVAL, {"from": alice})
+    voting_escrow.createLock(amount, chain[-1].timestamp + 2 * INTERVAL, {"from": alice})
     stages["alice_deposit_2"] = (web3.eth.blockNumber, chain[-1].timestamp)
 
     assert approx(voting_escrow.totalSupply(), amount // MAXTIME * 2 * INTERVAL, TOL)
     assert approx(voting_escrow.balanceOf(alice), amount // MAXTIME * 2 * INTERVAL, TOL)
     assert voting_escrow.balanceOf(bob) == 0
 
-    voting_escrow.create_lock(amount, chain[-1].timestamp + INTERVAL, {"from": bob})
+    voting_escrow.createLock(amount, chain[-1].timestamp + INTERVAL, {"from": bob})
     stages["bob_deposit_2"] = (web3.eth.blockNumber, chain[-1].timestamp)
 
     assert approx(voting_escrow.totalSupply(), amount // MAXTIME * 3 * INTERVAL, TOL)

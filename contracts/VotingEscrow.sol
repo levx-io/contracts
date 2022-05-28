@@ -66,10 +66,10 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
     mapping(address => LockedBalance) public locked;
     uint256 public epoch;
 
-    mapping(uint256 => Point) public point_history; // epoch -> unsigned point
-    mapping(address => mapping(uint256 => Point)) public user_point_history; // user -> Point[user_epoch]
-    mapping(address => uint256) public user_point_epoch;
-    mapping(uint256 => int128) public slope_changes; // time -> signed slope change
+    mapping(uint256 => Point) public pointHistory; // epoch -> unsigned point
+    mapping(address => mapping(uint256 => Point)) public userPointHistory; // user -> Point[user_epoch]
+    mapping(address => uint256) public userPointEpoch;
+    mapping(uint256 => int128) public slopeChanges; // time -> signed slope change
 
     event SetWhitelisted(address indexed account, bool whitelisted);
     event Deposit(address indexed provider, uint256 value, uint256 indexed locktime, int128 _type, uint256 ts);
@@ -77,24 +77,24 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
     event Supply(uint256 prevSupply, uint256 supply);
 
     constructor(
-        address token_addr,
+        address _token,
         string memory _name,
         string memory _symbol,
         uint256 _interval,
         uint256 _maxtime,
         uint256 _multiplier
     ) {
-        token = token_addr;
+        token = _token;
         name = _name;
         symbol = _symbol;
-        decimals = IERC20Metadata(token_addr).decimals();
+        decimals = IERC20Metadata(_token).decimals();
 
         interval = _interval;
         maxtime = _maxtime;
         multiplier = _multiplier;
 
-        point_history[0].blk = block.number;
-        point_history[0].ts = block.timestamp;
+        pointHistory[0].blk = block.number;
+        pointHistory[0].ts = block.timestamp;
     }
 
     /**
@@ -118,9 +118,9 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @param addr Address of the user wallet
      * @return Value of the slope
      */
-    function get_last_user_slope(address addr) external view returns (int128) {
-        uint256 uepoch = user_point_epoch[addr];
-        return user_point_history[addr][uepoch].slope;
+    function getLastUserSlope(address addr) external view returns (int128) {
+        uint256 uepoch = userPointEpoch[addr];
+        return userPointHistory[addr][uepoch].slope;
     }
 
     /**
@@ -129,8 +129,8 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @param _idx User epoch number
      * @return Epoch time of the checkpoint
      */
-    function user_point_history__ts(address _addr, uint256 _idx) external view returns (uint256) {
-        return user_point_history[_addr][_idx].ts;
+    function checkpointTime(address _addr, uint256 _idx) external view returns (uint256) {
+        return userPointHistory[_addr][_idx].ts;
     }
 
     /**
@@ -138,7 +138,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @param _addr User wallet
      * @return Epoch time of the lock end
      */
-    function locked__end(address _addr) external view returns (uint256) {
+    function unlockTime(address _addr) external view returns (uint256) {
         return locked[_addr].end;
     }
 
@@ -174,15 +174,15 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
             // Read values of scheduled changes in the slope
             // old_locked.end can be in the past and in the future
             // new_locked.end can ONLY by in the FUTURE unless everything expired: than zeros
-            old_dslope = slope_changes[old_locked.end];
+            old_dslope = slopeChanges[old_locked.end];
             if (new_locked.end != 0) {
                 if (new_locked.end == old_locked.end) new_dslope = old_dslope;
-                else new_dslope = slope_changes[new_locked.end];
+                else new_dslope = slopeChanges[new_locked.end];
             }
         }
 
         Point memory last_point = Point({bias: 0, slope: 0, ts: block.timestamp, blk: block.number});
-        if (_epoch > 0) last_point = point_history[_epoch];
+        if (_epoch > 0) last_point = pointHistory[_epoch];
         uint256 last_checkpoint = last_point.ts;
         // initial_last_point is used for extrapolation to calculate block number
         // (approximately, for *At methods) and save them
@@ -203,7 +203,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
                 t_i += interval;
                 int128 d_slope;
                 if (t_i > block.timestamp) t_i = block.timestamp;
-                else d_slope = slope_changes[t_i];
+                else d_slope = slopeChanges[t_i];
                 last_point.bias -= last_point.slope * (t_i - last_checkpoint).toInt128();
                 last_point.slope += d_slope;
                 if (last_point.bias < 0)
@@ -219,7 +219,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
                 if (t_i == block.timestamp) {
                     last_point.blk = block.number;
                     break;
-                } else point_history[_epoch] = last_point;
+                } else pointHistory[_epoch] = last_point;
             }
         }
 
@@ -236,7 +236,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
         }
 
         // Record the changed point into history
-        point_history[_epoch] = last_point;
+        pointHistory[_epoch] = last_point;
 
         if (addr != address(0)) {
             // Schedule the slope changes (slope is going down)
@@ -246,24 +246,24 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
                 // old_dslope was <something> - u_old.slope, so we cancel that
                 old_dslope += u_old.slope;
                 if (new_locked.end == old_locked.end) old_dslope -= u_new.slope; // It was a new deposit, not extension
-                slope_changes[old_locked.end] = old_dslope;
+                slopeChanges[old_locked.end] = old_dslope;
             }
 
             if (new_locked.end > block.timestamp) {
                 if (new_locked.end > old_locked.end) {
                     new_dslope -= u_new.slope; // old slope disappeared at this point
-                    slope_changes[new_locked.end] = new_dslope;
+                    slopeChanges[new_locked.end] = new_dslope;
                 }
                 // else: we recorded it already in old_dslope
             }
 
             // Now handle user history
-            uint256 user_epoch = user_point_epoch[addr] + 1;
+            uint256 user_epoch = userPointEpoch[addr] + 1;
 
-            user_point_epoch[addr] = user_epoch;
+            userPointEpoch[addr] = user_epoch;
             u_new.ts = block.timestamp;
             u_new.blk = block.number;
-            user_point_history[addr][user_epoch] = u_new;
+            userPointHistory[addr][user_epoch] = u_new;
         }
     }
 
@@ -274,7 +274,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @param unlock_time New time when to unlock the tokens, or 0 if unchanged
      * @param locked_balance Previous locked amount / timestamp
      */
-    function _deposit_for(
+    function _depositFor(
         address _addr,
         uint256 _value,
         uint256 unlock_time,
@@ -318,14 +318,14 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @param _addr User's wallet address
      * @param _value Amount to add to user's lock
      */
-    function deposit_for(address _addr, uint256 _value) external nonReentrant {
+    function depositFor(address _addr, uint256 _value) external nonReentrant {
         LockedBalance memory _locked = locked[_addr];
 
         require(_value > 0, "VE: INVALID_VALUE");
         require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
 
-        _deposit_for(_addr, _value, 0, _locked, DEPOSIT_FOR_TYPE);
+        _depositFor(_addr, _value, 0, _locked, DEPOSIT_FOR_TYPE);
     }
 
     /**
@@ -333,7 +333,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @param _value Amount to deposit
      * @param _unlock_time Epoch time when tokens unlock, rounded down to whole weeks
      */
-    function create_lock(uint256 _value, uint256 _unlock_time) external nonReentrant authorized {
+    function createLock(uint256 _value, uint256 _unlock_time) external nonReentrant authorized {
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to weeks
         LockedBalance memory _locked = locked[msg.sender];
 
@@ -342,7 +342,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
         require(unlock_time > block.timestamp, "VE: UNLOCK_TIME_TOO_EARLY");
         require(unlock_time <= block.timestamp + maxtime, "VE: UNLOCK_TIME_TOO_LATE");
 
-        _deposit_for(msg.sender, _value, unlock_time, _locked, CRETE_LOCK_TYPE);
+        _depositFor(msg.sender, _value, unlock_time, _locked, CRETE_LOCK_TYPE);
     }
 
     /**
@@ -350,21 +350,21 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      *          without modifying the unlock time
      * @param _value Amount of tokens to deposit and add to the lock
      */
-    function increase_amount(uint256 _value) external nonReentrant authorized {
+    function increaseAmount(uint256 _value) external nonReentrant authorized {
         LockedBalance memory _locked = locked[msg.sender];
 
         require(_value > 0, "VE: INVALID_VALUE");
         require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
 
-        _deposit_for(msg.sender, _value, 0, _locked, INCREASE_LOCK_AMOUNT);
+        _depositFor(msg.sender, _value, 0, _locked, INCREASE_LOCK_AMOUNT);
     }
 
     /**
      * @notice Extend the unlock time for `msg.sender` to `_unlock_time`
      * @param _unlock_time New epoch time for unlocking
      */
-    function increase_unlock_time(uint256 _unlock_time) external nonReentrant authorized {
+    function increaseUnlockTime(uint256 _unlock_time) external nonReentrant authorized {
         LockedBalance memory _locked = locked[msg.sender];
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to weeks
 
@@ -378,7 +378,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
         require(unlock_time > _locked.end, "VE: UNLOCK_TIME_TOO_EARLY");
         require(unlock_time <= block.timestamp + maxtime, "VE: UNLOCK_TIME_TOO_LATE");
 
-        _deposit_for(msg.sender, 0, unlock_time, _locked, INCREASE_UNLOCK_TIME);
+        _depositFor(msg.sender, 0, unlock_time, _locked, INCREASE_UNLOCK_TIME);
     }
 
     /**
@@ -415,13 +415,13 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @param max_epoch Don't go beyond this epoch
      * @return Approximate timestamp for block
      */
-    function find_block_epoch(uint256 _block, uint256 max_epoch) internal view returns (uint256) {
+    function _findBlockEpoch(uint256 _block, uint256 max_epoch) internal view returns (uint256) {
         uint256 _min;
         uint256 _max = max_epoch;
         for (uint256 i; i < 128; i++) {
             if (_min >= _max) break;
             uint256 _mid = (_min + _max + 1) / 2;
-            if (point_history[_mid].blk <= _block) _min = _mid;
+            if (pointHistory[_mid].blk <= _block) _min = _mid;
             else _max = _mid - 1;
         }
         return _min;
@@ -439,10 +439,10 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @return User voting power
      */
     function balanceOf(address addr, uint256 _t) public view returns (uint256) {
-        uint256 _epoch = user_point_epoch[addr];
+        uint256 _epoch = userPointEpoch[addr];
         if (_epoch == 0) return 0;
         else {
-            Point memory last_point = user_point_history[addr][_epoch];
+            Point memory last_point = userPointHistory[addr][_epoch];
             last_point.bias -= last_point.slope * (_t - last_point.ts).toInt128();
             if (last_point.bias < 0) last_point.bias = 0;
             return last_point.bias.toUint256();
@@ -463,23 +463,23 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
 
         // Binary search
         uint256 _min;
-        uint256 _max = user_point_epoch[addr];
+        uint256 _max = userPointEpoch[addr];
         for (uint256 i; i < 128; i++) {
             if (_min >= _max) break;
             uint256 _mid = (_min + _max + 1) / 2;
-            if (user_point_history[addr][_mid].blk <= _block) _min = _mid;
+            if (userPointHistory[addr][_mid].blk <= _block) _min = _mid;
             else _max = _mid - 1;
         }
 
-        Point memory upoint = user_point_history[addr][_min];
+        Point memory upoint = userPointHistory[addr][_min];
 
         uint256 max_epoch = epoch;
-        uint256 _epoch = find_block_epoch(_block, max_epoch);
-        Point memory point_0 = point_history[_epoch];
+        uint256 _epoch = _findBlockEpoch(_block, max_epoch);
+        Point memory point_0 = pointHistory[_epoch];
         uint256 d_block;
         uint256 d_t;
         if (_epoch < max_epoch) {
-            Point memory point_1 = point_history[_epoch + 1];
+            Point memory point_1 = pointHistory[_epoch + 1];
             d_block = point_1.blk - point_0.blk;
             d_t = point_1.ts - point_0.ts;
         } else {
@@ -507,7 +507,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
             t_i += interval;
             int128 d_slope;
             if (t_i > t) t_i = t;
-            else d_slope = slope_changes[t_i];
+            else d_slope = slopeChanges[t_i];
             last_point.bias -= last_point.slope * (t_i - last_point.ts).toInt128();
             if (t_i == t) break;
             last_point.slope += d_slope;
@@ -529,7 +529,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      */
     function totalSupply(uint256 t) public view returns (uint256) {
         uint256 _epoch = epoch;
-        Point memory last_point = point_history[_epoch];
+        Point memory last_point = pointHistory[_epoch];
         return supply_at(last_point, t);
     }
 
@@ -541,12 +541,12 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
     function totalSupplyAt(uint256 _block) external view returns (uint256) {
         require(_block <= block.number);
         uint256 _epoch = epoch;
-        uint256 target_epoch = find_block_epoch(_block, _epoch);
+        uint256 target_epoch = _findBlockEpoch(_block, _epoch);
 
-        Point memory point = point_history[target_epoch];
+        Point memory point = pointHistory[target_epoch];
         uint256 dt;
         if (target_epoch < _epoch) {
-            Point memory point_next = point_history[target_epoch + 1];
+            Point memory point_next = pointHistory[target_epoch + 1];
             if (point.blk != point_next.blk)
                 dt = ((_block - point.blk) * (point_next.ts - point.ts)) / (point_next.blk - point.blk);
         } else if (point.blk != block.number)

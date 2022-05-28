@@ -111,7 +111,7 @@ describe("VotingEscrow", () => {
 
         stages["before_deposits"] = await getBlockInfo();
 
-        await ve.connect(alice).create_lock(amount, (await getBlockTimestamp()) + INTERVAL);
+        await ve.connect(alice).createLock(amount, (await getBlockTimestamp()) + INTERVAL);
         stages["alice_deposit"] = await getBlockInfo();
 
         await sleep(H);
@@ -153,14 +153,14 @@ describe("VotingEscrow", () => {
         await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
         await mine();
 
-        await ve.connect(alice).create_lock(amount, (await getBlockTimestamp()) + 2 * INTERVAL);
+        await ve.connect(alice).createLock(amount, (await getBlockTimestamp()) + 2 * INTERVAL);
         stages["alice_deposit_2"] = await getBlockInfo();
 
         expectApproxEqual(await totalSupply(), amount.div(MAXTIME).mul(2).mul(INTERVAL), TOL);
         expectApproxEqual(await balanceOf(alice), amount.div(MAXTIME).mul(2).mul(INTERVAL), TOL);
         expectZero(await balanceOf(bob));
 
-        await ve.connect(bob).create_lock(amount, (await getBlockTimestamp()) + INTERVAL);
+        await ve.connect(bob).createLock(amount, (await getBlockTimestamp()) + INTERVAL);
         stages["bob_deposit_2"] = await getBlockInfo();
 
         expectApproxEqual(await totalSupply(), amount.div(MAXTIME).mul(3).mul(INTERVAL), TOL);
