@@ -24,7 +24,6 @@ const DAY = 86400;
 const NUMBER_OF_DAYS = 3;
 const INTERVAL = NUMBER_OF_DAYS * DAY;
 const MAXTIME = 2 * 365 * DAY;
-const MULTIPLIER = constants.WeiPerEther;
 const TOL = PRECISION_BASE.mul(120).div(INTERVAL);
 
 const setupTest = async () => {
@@ -35,7 +34,7 @@ const setupTest = async () => {
     const token = (await Token.deploy("Token", "TOKEN", constants.WeiPerEther.mul(2100000))) as ERC20Mock;
 
     const VE = await ethers.getContractFactory("VotingEscrow");
-    const ve = (await VE.deploy(token.address, "veToken", "VE", INTERVAL, MAXTIME, MULTIPLIER)) as VotingEscrow;
+    const ve = (await VE.deploy(token.address, "veToken", "VE", INTERVAL, MAXTIME)) as VotingEscrow;
 
     const totalSupply = async (): Promise<BigNumber> => await ve["totalSupply()"]();
     const totalSupplyAt = async (block: number): Promise<BigNumber> => await ve.totalSupplyAt(block);

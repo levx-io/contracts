@@ -93,7 +93,7 @@ def token(ERC20Mock, accounts):
 @pytest.fixture(scope="module")
 def voting_escrow(VotingEscrow, accounts, token):
     yield VotingEscrow.deploy(
-        token, "Voting-escrowed CRV", "veCRV", INTERVAL, MAXTIME, 10 ** 18, {"from": accounts[0]}
+        token, "Voting-escrowed CRV", "veCRV", INTERVAL, MAXTIME, {"from": accounts[0]}
     )
 
 
