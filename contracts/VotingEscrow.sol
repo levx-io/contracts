@@ -44,6 +44,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
 
     struct LockedBalance {
         int128 amount;
+        uint256 discount;
         uint256 end;
     }
 
@@ -60,7 +61,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
     string public symbol;
     uint8 public immutable decimals;
 
-    mapping(address => bool) public whitelisted;
+    mapping(address => bool) public delegated;
 
     uint256 public supply;
     mapping(address => LockedBalance) public locked;
@@ -71,9 +72,16 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
     mapping(address => uint256) public userPointEpoch;
     mapping(uint256 => int128) public slopeChanges; // time -> signed slope change
 
-    event SetWhitelisted(address indexed account, bool whitelisted);
-    event Deposit(address indexed provider, uint256 value, uint256 indexed locktime, int128 _type, uint256 ts);
-    event Withdraw(address indexed provider, uint256 value, uint256 ts);
+    event SetDelegated(address indexed account, bool delegated);
+    event Deposit(
+        address indexed provider,
+        uint256 value,
+        uint256 discount,
+        uint256 indexed locktime,
+        int128 _type,
+        uint256 ts
+    );
+    event Withdraw(address indexed provider, uint256 value, uint256 discount, uint256 ts);
     event Supply(uint256 prevSupply, uint256 supply);
 
     constructor(
@@ -102,15 +110,15 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      */
     modifier authorized {
         if (msg.sender != tx.origin) {
-            require(whitelisted[msg.sender], "VE: CONTRACT_NOT_WHITELISTED");
+            require(delegated[msg.sender], "VE: CONTRACT_NOT_DELEGATED");
         }
         _;
     }
 
-    function setWhitelisted(address account, bool _whitelisted) external onlyOwner {
-        whitelisted[account] = _whitelisted;
+    function setDelegated(address account, bool _delegated) external onlyOwner {
+        delegated[account] = _delegated;
 
-        emit SetWhitelisted(account, _whitelisted);
+        emit SetDelegated(account, _delegated);
     }
 
     /**
@@ -271,12 +279,14 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @notice Deposit and lock tokens for a user
      * @param _addr User's wallet address
      * @param _value Amount to deposit
+     * @param _discount Amount to get discounted out of _value
      * @param unlock_time New time when to unlock the tokens, or 0 if unchanged
      * @param locked_balance Previous locked amount / timestamp
      */
     function _depositFor(
         address _addr,
         uint256 _value,
+        uint256 _discount,
         uint256 unlock_time,
         LockedBalance memory locked_balance,
         int128 _type
@@ -286,9 +296,10 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
 
         supply = supply_before + _value;
         LockedBalance memory old_locked;
-        (old_locked.amount, old_locked.end) = (_locked.amount, _locked.end);
+        (old_locked.amount, old_locked.discount, old_locked.end) = (_locked.amount, _locked.discount, _locked.end);
         // Adding to existing lock, or if a lock is expired - creating a new one
         _locked.amount += (_value).toInt128();
+        if (_discount != 0) _locked.discount += _discount;
         if (unlock_time != 0) _locked.end = unlock_time;
         locked[_addr] = _locked;
 
@@ -298,9 +309,9 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
         // _locked.end > block.timestamp (always)
         _checkpoint(_addr, old_locked, _locked);
 
-        if (_value != 0) IERC20(token).safeTransferFrom(_addr, address(this), _value);
+        if (_value != 0) IERC20(token).safeTransferFrom(_addr, address(this), _value - _discount);
 
-        emit Deposit(_addr, _value, _locked.end, _type, block.timestamp);
+        emit Deposit(_addr, _value, _discount, _locked.end, _type, block.timestamp);
         emit Supply(supply_before, supply_before + _value);
     }
 
@@ -308,7 +319,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      * @notice Record global data to checkpoint
      */
     function checkpoint() external {
-        _checkpoint(address(0), LockedBalance(0, 0), LockedBalance(0, 0));
+        _checkpoint(address(0), LockedBalance(0, 0, 0), LockedBalance(0, 0, 0));
     }
 
     /**
@@ -317,15 +328,25 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
      *      cannot extend their locktime and deposit for a brand new user
      * @param _addr User's wallet address
      * @param _value Amount to add to user's lock
+     * @param _discount Amount to get discounted out of _value
      */
-    function depositFor(address _addr, uint256 _value) external nonReentrant {
+    function depositFor(
+        address _addr,
+        uint256 _value,
+        uint256 _discount
+    ) external nonReentrant {
+        if (_discount > 0) {
+            require(delegated[msg.sender], "VE: NOT_DELEGATED");
+        }
+
         LockedBalance memory _locked = locked[_addr];
 
         require(_value > 0, "VE: INVALID_VALUE");
+        require(_value > _discount, "VE: DISCOUNT_TOO_HIGH");
         require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
 
-        _depositFor(_addr, _value, 0, _locked, DEPOSIT_FOR_TYPE);
+        _depositFor(_addr, _value, _discount, 0, _locked, DEPOSIT_FOR_TYPE);
     }
 
     /**
@@ -342,7 +363,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
         require(unlock_time > block.timestamp, "VE: UNLOCK_TIME_TOO_EARLY");
         require(unlock_time <= block.timestamp + maxtime, "VE: UNLOCK_TIME_TOO_LATE");
 
-        _depositFor(msg.sender, _value, unlock_time, _locked, CRETE_LOCK_TYPE);
+        _depositFor(msg.sender, _value, 0, unlock_time, _locked, CRETE_LOCK_TYPE);
     }
 
     /**
@@ -357,7 +378,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
         require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
 
-        _depositFor(msg.sender, _value, 0, _locked, INCREASE_LOCK_AMOUNT);
+        _depositFor(msg.sender, _value, 0, 0, _locked, INCREASE_LOCK_AMOUNT);
     }
 
     /**
@@ -378,7 +399,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
         require(unlock_time > _locked.end, "VE: UNLOCK_TIME_TOO_EARLY");
         require(unlock_time <= block.timestamp + maxtime, "VE: UNLOCK_TIME_TOO_LATE");
 
-        _depositFor(msg.sender, 0, unlock_time, _locked, INCREASE_UNLOCK_TIME);
+        _depositFor(msg.sender, 0, 0, unlock_time, _locked, INCREASE_UNLOCK_TIME);
     }
 
     /**
@@ -390,18 +411,18 @@ contract VotingEscrow is Ownable, ReentrancyGuard {
         require(block.timestamp >= _locked.end, "VE: LOCK_NOT_EXPIRED");
         uint256 value = _locked.amount.toUint256();
 
-        locked[msg.sender] = LockedBalance(0, 0);
+        locked[msg.sender] = LockedBalance(0, 0, 0);
         uint256 supply_before = supply;
         supply = supply_before - value;
 
         // old_locked can have either expired <= timestamp or zero end
         // _locked has only 0 end
         // Both can have >= 0 amount
-        _checkpoint(msg.sender, _locked, LockedBalance(0, 0));
+        _checkpoint(msg.sender, _locked, LockedBalance(0, 0, 0));
 
-        IERC20(token).safeTransfer(msg.sender, value);
+        IERC20(token).safeTransfer(msg.sender, value - _locked.discount);
 
-        emit Withdraw(msg.sender, value, block.timestamp);
+        emit Withdraw(msg.sender, value, _locked.discount, block.timestamp);
         emit Supply(supply_before, supply_before - value);
     }
 
