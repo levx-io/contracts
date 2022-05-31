@@ -6,7 +6,7 @@ from brownie_tokens import ERC20
 DAY = 86400
 NUMBER_OF_DAYS = 3
 INTERVAL = NUMBER_OF_DAYS * DAY
-MAXTIME = 2 * 365 * DAY
+MAXTIME = (2 * 365 * DAY) / INTERVAL * INTERVAL
 GAS_LIMIT = 4_000_000
 
 class StateMachine:

@@ -23,7 +23,7 @@ const H = 3600;
 const DAY = 86400;
 const NUMBER_OF_DAYS = 3;
 const INTERVAL = NUMBER_OF_DAYS * DAY;
-const MAXTIME = 2 * 365 * DAY;
+const MAXTIME = Math.floor((2 * 365 * DAY) / INTERVAL) * INTERVAL;
 const TOL = PRECISION_BASE.mul(120).div(INTERVAL);
 
 const setupTest = async () => {

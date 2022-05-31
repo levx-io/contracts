@@ -9,35 +9,32 @@ contract BoostedVotingEscrowDelegate {
 
     uint256 internal constant BOOST_BASE = 1e12;
 
-    address public token;
-    address public ve;
-    uint256 public minBoost;
-    uint256 public maxBoost;
-    uint256 public deadline;
+    address public immutable token;
+    address public immutable ve;
+    uint256 public immutable mintime;
+    uint256 public immutable maxBoost;
+    uint256 public immutable deadline;
 
     constructor(
         address _token,
         address _ve,
-        uint256 _minBoost,
+        uint256 _mintime,
         uint256 _maxBoost,
         uint256 _deadline
     ) {
         token = _token;
         ve = _ve;
-        minBoost = _minBoost;
+        mintime = _mintime;
         maxBoost = _maxBoost;
         deadline = _deadline;
-
-        IERC20(_token).approve(_ve, type(uint256).max);
     }
 
     function boosted(uint256 amountToken, uint256 duration) public view returns (uint256 amountVE, uint256 unlockTime) {
         (uint256 interval, uint256 maxtime) = IVotingEscrow(ve).getTemporalParams();
         duration = (duration / interval) * interval; // rounded down to a multiple of interval
+        require(duration >= mintime, "BVED: DURATION_TOO_SHORT");
 
         uint256 boost = (maxBoost * duration) / maxtime;
-        require(boost >= minBoost, "BVED: DURATION_TOO_SHORT");
-
         return ((amountToken * boost) / BOOST_BASE, block.timestamp + duration);
     }
 
@@ -46,7 +43,6 @@ contract BoostedVotingEscrowDelegate {
 
         (uint256 amountVE, uint256 unlockTime) = boosted(amountToken, duration);
 
-        IERC20(token).safeTransferFrom(msg.sender, address(this), amountToken);
         IVotingEscrow(ve).createLockFor(msg.sender, amountVE, amountVE - amountToken, unlockTime);
     }
 
@@ -58,7 +54,6 @@ contract BoostedVotingEscrowDelegate {
 
         (uint256 amountVE, ) = boosted(amountToken, unlockTime - block.timestamp);
 
-        IERC20(token).safeTransferFrom(msg.sender, address(this), amountToken);
         IVotingEscrow(ve).increaseAmountFor(msg.sender, amountVE, amountVE - amountToken);
     }
 }
