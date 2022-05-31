@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 interface IVotingEscrow {
-    event SetDelegated(address indexed account, bool delegated);
+    event SetMiddleman(address indexed account, bool isMiddleman);
     event Deposit(
         address indexed provider,
         uint256 value,
@@ -22,7 +22,7 @@ interface IVotingEscrow {
 
     function decimals() external view returns (uint8);
 
-    function delegated(address account) external view returns (bool);
+    function isMiddleman(address account) external view returns (bool);
 
     function supply() external view returns (uint256);
 
@@ -69,7 +69,7 @@ interface IVotingEscrow {
 
     function unlockTime(address _addr) external view returns (uint256);
 
-    function setDelegated(address account, bool _delegated) external;
+    function setMiddleman(address account, bool _isMiddleman) external;
 
     function checkpoint() external;
 
@@ -83,6 +83,12 @@ interface IVotingEscrow {
     ) external;
 
     function createLock(uint256 _value, uint256 _unlock_time) external;
+
+    function increaseAmountFor(
+        address _addr,
+        uint256 _value,
+        uint256 _discount
+    ) external;
 
     function increaseAmount(uint256 _value) external;
 

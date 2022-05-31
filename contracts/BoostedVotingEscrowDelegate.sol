@@ -49,4 +49,16 @@ contract BoostedVotingEscrowDelegate {
         IERC20(token).safeTransferFrom(msg.sender, address(this), amountToken);
         IVotingEscrow(ve).createLockFor(msg.sender, amountVE, amountVE - amountToken, unlockTime);
     }
+
+    function increaseAmount(uint256 amountToken) external {
+        require(block.timestamp < deadline, "BVED: EXPIRED");
+
+        uint256 unlockTime = IVotingEscrow(ve).unlockTime(msg.sender);
+        require(unlockTime > 0, "BVED: LOCK_NOT_FOUND");
+
+        (uint256 amountVE, ) = boosted(amountToken, unlockTime - block.timestamp);
+
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amountToken);
+        IVotingEscrow(ve).increaseAmountFor(msg.sender, amountVE, amountVE - amountToken);
+    }
 }

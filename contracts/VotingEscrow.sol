@@ -62,7 +62,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
     string public override symbol;
     uint8 public immutable override decimals;
 
-    mapping(address => bool) public override delegated;
+    mapping(address => bool) public override isMiddleman;
 
     uint256 public override supply;
     mapping(address => LockedBalance) public override locked;
@@ -92,12 +92,17 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         pointHistory[0].ts = block.timestamp;
     }
 
+    modifier calledByMiddleman {
+        require(isMiddleman[msg.sender], "VE: NOT_MIDDLEMAN");
+        _;
+    }
+
     /**
      * @notice Check if the call is from an EOA or a whitelisted smart contract, revert if not
      */
     modifier authorized {
         if (msg.sender != tx.origin) {
-            require(delegated[msg.sender], "VE: CONTRACT_NOT_DELEGATED");
+            require(isMiddleman[msg.sender], "VE: CONTRACT_NOT_MIDDLEMAN");
         }
         _;
     }
@@ -135,10 +140,10 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         return locked[_addr].end;
     }
 
-    function setDelegated(address account, bool _delegated) external override onlyOwner {
-        delegated[account] = _delegated;
+    function setMiddleman(address account, bool _isMiddleman) external override onlyOwner {
+        isMiddleman[account] = _isMiddleman;
 
-        emit SetDelegated(account, _delegated);
+        emit SetMiddleman(account, _isMiddleman);
     }
 
     /**
@@ -343,11 +348,9 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         uint256 _value,
         uint256 _discount,
         uint256 _unlock_time
-    ) external override nonReentrant {
-        require(delegated[msg.sender], "VE: NOT_DELEGATED");
-
+    ) external override nonReentrant calledByMiddleman {
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to a multiple of interval
-        LockedBalance memory _locked = locked[msg.sender];
+        LockedBalance memory _locked = locked[_addr];
 
         require(_value > 0, "VE: INVALID_VALUE");
         require(_value > _discount, "VE: DISCOUNT_TOO_HIGH");
@@ -378,6 +381,28 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
     /**
      * @notice Deposit `_value` additional tokens for `msg.sender`
      *          without modifying the unlock time
+     * @param _addr User's wallet address
+     * @param _value Amount of tokens to deposit and add to the lock
+     * @param _discount Amount to get discounted out of _value
+     */
+    function increaseAmountFor(
+        address _addr,
+        uint256 _value,
+        uint256 _discount
+    ) external override nonReentrant calledByMiddleman {
+        LockedBalance memory _locked = locked[_addr];
+
+        require(_value > 0, "VE: INVALID_VALUE");
+        require(_value > _discount, "VE: DISCOUNT_TOO_HIGH");
+        require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
+        require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
+
+        _depositFor(_addr, _value, _discount, 0, _locked, INCREASE_LOCK_AMOUNT);
+    }
+
+    /**
+     * @notice Deposit `_value` additional tokens for `msg.sender`
+     *          without modifying the unlock time
      * @param _value Amount of tokens to deposit and add to the lock
      */
     function increaseAmount(uint256 _value) external override nonReentrant authorized {
@@ -398,13 +423,9 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         LockedBalance memory _locked = locked[msg.sender];
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to a multiple of interval
 
-        // TODO: is it fair to increase the time?
-        // So if user 1 gets 1000 $THANOS and the price increases dramatically in 3 months user 1 can keep extending
-        // their lock period for the price they initially provided liquidity at or will it get reevaluated based on the
-        // new $LEVX price?
-
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
         require(_locked.amount > 0, "VE: LOCK_AMOUNT_TOO_LOW");
+        require(_locked.discount == 0, "VE: LOCK_DISCOUNTED");
         require(unlock_time > _locked.end, "VE: UNLOCK_TIME_TOO_EARLY");
         require(unlock_time <= block.timestamp + maxtime, "VE: UNLOCK_TIME_TOO_LATE");
 
