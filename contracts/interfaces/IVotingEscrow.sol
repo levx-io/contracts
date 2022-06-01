@@ -14,6 +14,10 @@ interface IVotingEscrow {
     event Withdraw(address indexed provider, uint256 value, uint256 discount, uint256 ts);
     event Supply(uint256 prevSupply, uint256 supply);
 
+    function interval() external view returns (uint256);
+
+    function maxDuration() external view returns (uint256);
+
     function token() external view returns (address);
 
     function name() external view returns (string memory);
@@ -60,8 +64,6 @@ interface IVotingEscrow {
     function userPointEpoch(address account) external view returns (uint256);
 
     function slopeChanges(uint256 epoch) external view returns (int128);
-
-    function getTemporalParams() external view returns (uint256 _internal, uint256 _maxtime);
 
     function getLastUserSlope(address addr) external view returns (int128);
 

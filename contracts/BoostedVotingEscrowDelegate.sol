@@ -3,57 +3,92 @@ pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IVotingEscrow.sol";
+import "./interfaces/INFT.sol";
 
 contract BoostedVotingEscrowDelegate {
     using SafeERC20 for IERC20;
 
-    uint256 internal constant BOOST_BASE = 1e12;
-
     address public immutable token;
     address public immutable ve;
-    uint256 public immutable mintime;
+    address public immutable discountToken;
+    uint256 public immutable minDuration;
     uint256 public immutable maxBoost;
     uint256 public immutable deadline;
 
     constructor(
         address _token,
         address _ve,
-        uint256 _mintime,
+        address _discountToken,
+        uint256 _minDuration,
         uint256 _maxBoost,
         uint256 _deadline
     ) {
         token = _token;
         ve = _ve;
-        mintime = _mintime;
+        discountToken = _discountToken;
+        minDuration = _minDuration;
         maxBoost = _maxBoost;
         deadline = _deadline;
     }
 
-    function boosted(uint256 amountToken, uint256 duration) public view returns (uint256 amountVE, uint256 unlockTime) {
-        (uint256 interval, uint256 maxtime) = IVotingEscrow(ve).getTemporalParams();
-        duration = (duration / interval) * interval; // rounded down to a multiple of interval
-        require(duration >= mintime, "BVED: DURATION_TOO_SHORT");
+    modifier eligibleForDiscount {
+        require(INFT(discountToken).balanceOf(msg.sender) > 0, "BVED: DISCOUNT_TOKEN_NOT_OWNED");
+        _;
+    }
 
-        uint256 boost = (maxBoost * duration) / maxtime;
-        return ((amountToken * boost) / BOOST_BASE, block.timestamp + duration);
+    function createLockDiscounted(uint256 amountToken, uint256 duration) external eligibleForDiscount {
+        _createLock(amountToken, duration, true);
     }
 
     function createLock(uint256 amountToken, uint256 duration) external {
+        _createLock(amountToken, duration, false);
+    }
+
+    function _createLock(
+        uint256 amountToken,
+        uint256 duration,
+        bool discounted
+    ) internal {
         require(block.timestamp < deadline, "BVED: EXPIRED");
 
-        (uint256 amountVE, uint256 unlockTime) = boosted(amountToken, duration);
+        uint256 interval = IVotingEscrow(ve).interval();
+        duration = (duration / interval) * interval; // rounded down to a multiple of interval
+        uint256 amountVE = _amountVE(amountToken, duration, discounted);
 
-        IVotingEscrow(ve).createLockFor(msg.sender, amountVE, amountVE - amountToken, unlockTime);
+        IVotingEscrow(ve).createLockFor(msg.sender, amountVE, amountVE - amountToken, block.timestamp + duration);
+    }
+
+    function increaseAmountDiscounted(uint256 amountToken) external eligibleForDiscount {
+        _increaseAmount(amountToken, true);
     }
 
     function increaseAmount(uint256 amountToken) external {
+        _increaseAmount(amountToken, false);
+    }
+
+    function _increaseAmount(uint256 amountToken, bool discounted) internal {
         require(block.timestamp < deadline, "BVED: EXPIRED");
 
         uint256 unlockTime = IVotingEscrow(ve).unlockTime(msg.sender);
         require(unlockTime > 0, "BVED: LOCK_NOT_FOUND");
 
-        (uint256 amountVE, ) = boosted(amountToken, unlockTime - block.timestamp);
+        uint256 amountVE = _amountVE(amountToken, unlockTime - block.timestamp, discounted);
 
         IVotingEscrow(ve).increaseAmountFor(msg.sender, amountVE, amountVE - amountToken);
+    }
+
+    function _amountVE(
+        uint256 amountToken,
+        uint256 duration,
+        bool discounted
+    ) internal view returns (uint256 amountVE) {
+        uint256 maxDuration = IVotingEscrow(ve).maxDuration();
+        require(duration >= minDuration, "BVED: DURATION_TOO_SHORT");
+        require(duration <= maxDuration, "BVED: DURATION_TOO_LONG");
+
+        amountVE = (amountToken * maxBoost * duration) / maxDuration;
+        if (discounted) {
+            amountVE = (amountVE * 100) / 90;
+        }
     }
 }

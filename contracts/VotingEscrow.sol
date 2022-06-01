@@ -55,8 +55,8 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
     int128 internal constant INCREASE_UNLOCK_TIME = 3;
     uint256 internal constant MULTIPLIER = 1e18;
 
-    uint256 internal immutable interval;
-    uint256 internal immutable maxtime;
+    uint256 public immutable override interval;
+    uint256 public immutable override maxDuration;
     address public immutable override token;
     string public override name;
     string public override symbol;
@@ -78,7 +78,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         string memory _name,
         string memory _symbol,
         uint256 _interval,
-        uint256 _maxtime
+        uint256 _maxDuration
     ) {
         token = _token;
         name = _name;
@@ -86,7 +86,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         decimals = IERC20Metadata(_token).decimals();
 
         interval = _interval;
-        maxtime = (_maxtime / _interval) * _interval; // rounded down to a multiple of interval
+        maxDuration = (_maxDuration / _interval) * _interval; // rounded down to a multiple of interval
 
         pointHistory[0].blk = block.number;
         pointHistory[0].ts = block.timestamp;
@@ -105,10 +105,6 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
             require(isMiddleman[msg.sender], "VE: CONTRACT_NOT_MIDDLEMAN");
         }
         _;
-    }
-
-    function getTemporalParams() external view override returns (uint256 _internal, uint256 _maxtime) {
-        return (interval, maxtime);
     }
 
     /**
@@ -167,11 +163,11 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
             // Calculate slopes and biases
             // Kept at zero when they have to
             if (old_locked.end > block.timestamp && old_locked.amount > 0) {
-                u_old.slope = old_locked.amount / maxtime.toInt128();
+                u_old.slope = old_locked.amount / maxDuration.toInt128();
                 u_old.bias = u_old.slope * (old_locked.end - block.timestamp).toInt128();
             }
             if (new_locked.end > block.timestamp && new_locked.amount > 0) {
-                u_new.slope = new_locked.amount / maxtime.toInt128();
+                u_new.slope = new_locked.amount / maxDuration.toInt128();
                 u_new.bias = u_new.slope * (new_locked.end - block.timestamp).toInt128();
             }
 
@@ -356,7 +352,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         require(_value > _discount, "VE: DISCOUNT_TOO_HIGH");
         require(_locked.amount == 0, "VE: EXISTING_LOCK_FOUND");
         require(unlock_time > block.timestamp, "VE: UNLOCK_TIME_TOO_EARLY");
-        require(unlock_time <= block.timestamp + maxtime, "VE: UNLOCK_TIME_TOO_LATE");
+        require(unlock_time <= block.timestamp + maxDuration, "VE: UNLOCK_TIME_TOO_LATE");
 
         _depositFor(_addr, _value, _discount, unlock_time, _locked, CRETE_LOCK_TYPE);
     }
@@ -373,7 +369,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         require(_value > 0, "VE: INVALID_VALUE");
         require(_locked.amount == 0, "VE: EXISTING_LOCK_FOUND");
         require(unlock_time > block.timestamp, "VE: UNLOCK_TIME_TOO_EARLY");
-        require(unlock_time <= block.timestamp + maxtime, "VE: UNLOCK_TIME_TOO_LATE");
+        require(unlock_time <= block.timestamp + maxDuration, "VE: UNLOCK_TIME_TOO_LATE");
 
         _depositFor(msg.sender, _value, 0, unlock_time, _locked, CRETE_LOCK_TYPE);
     }
@@ -427,7 +423,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         require(_locked.amount > 0, "VE: LOCK_AMOUNT_TOO_LOW");
         require(_locked.discount == 0, "VE: LOCK_DISCOUNTED");
         require(unlock_time > _locked.end, "VE: UNLOCK_TIME_TOO_EARLY");
-        require(unlock_time <= block.timestamp + maxtime, "VE: UNLOCK_TIME_TOO_LATE");
+        require(unlock_time <= block.timestamp + maxDuration, "VE: UNLOCK_TIME_TOO_LATE");
 
         _depositFor(msg.sender, 0, 0, unlock_time, _locked, INCREASE_UNLOCK_TIME);
     }
