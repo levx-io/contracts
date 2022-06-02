@@ -301,7 +301,9 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         // _locked.end > block.timestamp (always)
         _checkpoint(_addr, old_locked, _locked);
 
-        if (_value != 0) IERC20(token).safeTransferFrom(_addr, address(this), _value - _discount);
+        if (_value > _discount) {
+            IERC20(token).safeTransferFrom(_addr, address(this), _value - _discount);
+        }
 
         emit Deposit(_addr, _value, _discount, _locked.end, _type, block.timestamp);
         emit Supply(supply_before, supply_before + _value);
@@ -349,7 +351,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         LockedBalance memory _locked = locked[_addr];
 
         require(_value > 0, "VE: INVALID_VALUE");
-        require(_value > _discount, "VE: DISCOUNT_TOO_HIGH");
+        require(_value >= _discount, "VE: DISCOUNT_TOO_HIGH");
         require(_locked.amount == 0, "VE: EXISTING_LOCK_FOUND");
         require(unlock_time > block.timestamp, "VE: UNLOCK_TIME_TOO_EARLY");
         require(unlock_time <= block.timestamp + maxDuration, "VE: UNLOCK_TIME_TOO_LATE");
@@ -389,7 +391,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         LockedBalance memory _locked = locked[_addr];
 
         require(_value > 0, "VE: INVALID_VALUE");
-        require(_value > _discount, "VE: DISCOUNT_TOO_HIGH");
+        require(_value >= _discount, "VE: DISCOUNT_TOO_HIGH");
         require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
 
@@ -420,7 +422,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to a multiple of interval
 
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
-        require(_locked.amount > 0, "VE: LOCK_AMOUNT_TOO_LOW");
+        require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
         require(_locked.discount == 0, "VE: LOCK_DISCOUNTED");
         require(unlock_time > _locked.end, "VE: UNLOCK_TIME_TOO_EARLY");
         require(unlock_time <= block.timestamp + maxDuration, "VE: UNLOCK_TIME_TOO_LATE");
@@ -446,9 +448,12 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         // Both can have >= 0 amount
         _checkpoint(msg.sender, _locked, LockedBalance(0, 0, 0));
 
-        IERC20(token).safeTransfer(msg.sender, value - _locked.discount);
+        uint256 _discount = _locked.discount;
+        if (value > _discount) {
+            IERC20(token).safeTransfer(msg.sender, value - _discount);
+        }
 
-        emit Withdraw(msg.sender, value, _locked.discount, block.timestamp);
+        emit Withdraw(msg.sender, value, _discount, block.timestamp);
         emit Supply(supply_before, supply_before - value);
     }
 

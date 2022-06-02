@@ -65,12 +65,12 @@ const setupTest = async () => {
     };
 };
 
-describe.only("BoostedVotingEscrowDelegate", () => {
+describe("BoostedVotingEscrowDelegate", () => {
     beforeEach(async () => {
         await ethers.provider.send("hardhat_reset", []);
     });
 
-    it.only("should createLock()", async () => {
+    it("should createLock()", async () => {
         const { token, ve, delegate, alice, bob, totalSupply, balanceOf } = await setupTest();
 
         const amount = constants.WeiPerEther.mul(1000);
@@ -229,7 +229,7 @@ describe.only("BoostedVotingEscrowDelegate", () => {
         await sleep(H);
 
         await expect(delegate.connect(alice).createLock(amount, MAX_DURATION + INTERVAL)).to.be.revertedWith(
-            "BVED: DURATION_TOO_LONG"
+            "VED: DURATION_TOO_LONG"
         );
         ts = await getBlockTimestamp();
         await delegate.connect(alice).createLock(amount, MAX_DURATION);

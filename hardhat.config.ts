@@ -164,13 +164,26 @@ const config: HardhatUserConfig = {
         eachLine: removeConsoleLog(bre => bre.network.name !== "hardhat" && bre.network.name !== "localhost"),
     },
     solidity: {
-        version: "0.8.14",
-        settings: {
-            optimizer: {
-                enabled: true,
-                runs: 200,
+        compilers: [
+            {
+                version: "0.6.12",
+                settings: {
+                    optimizer: {
+                        enabled: true,
+                        runs: 200,
+                    },
+                },
             },
-        },
+            {
+                version: "0.8.14",
+                settings: {
+                    optimizer: {
+                        enabled: true,
+                        runs: 200,
+                    },
+                },
+            },
+        ],
     },
     tenderly: {
         project: process.env.TENDERLY_PROJECT,
