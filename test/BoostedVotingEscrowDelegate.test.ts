@@ -65,12 +65,12 @@ const setupTest = async () => {
     };
 };
 
-describe("BoostedVotingEscrowDelegate", () => {
+describe.only("BoostedVotingEscrowDelegate", () => {
     beforeEach(async () => {
         await ethers.provider.send("hardhat_reset", []);
     });
 
-    it("should createLock()", async () => {
+    it.only("should createLock()", async () => {
         const { token, ve, delegate, alice, bob, totalSupply, balanceOf } = await setupTest();
 
         const amount = constants.WeiPerEther.mul(1000);
@@ -231,14 +231,16 @@ describe("BoostedVotingEscrowDelegate", () => {
         await expect(delegate.connect(alice).createLock(amount, MAX_DURATION + INTERVAL)).to.be.revertedWith(
             "BVED: DURATION_TOO_LONG"
         );
+        ts = await getBlockTimestamp();
         await delegate.connect(alice).createLock(amount, MAX_DURATION);
 
         await sleep(H);
         await mine();
 
-        boosted_alice = amount.mul(MAX_BOOST);
-        expectApproxEqual(await totalSupply(), boosted_alice.div(MAX_DURATION).mul(MAX_DURATION - 2 * H), TOL);
-        expectApproxEqual(await balanceOf(alice), boosted_alice.div(MAX_DURATION).mul(MAX_DURATION - 2 * H), TOL);
+        const duration = Math.floor((ts + MAX_DURATION) / INTERVAL) * INTERVAL - ts;
+        boosted_alice = amount.mul(MAX_BOOST).mul(duration).div(MAX_DURATION);
+        expectApproxEqual(await totalSupply(), boosted_alice.div(MAX_DURATION).mul(duration - H), TOL);
+        expectApproxEqual(await balanceOf(alice), boosted_alice.div(MAX_DURATION).mul(duration - H), TOL);
         expectZero(await balanceOf(bob));
         t0 = await getBlockTimestamp();
 
@@ -250,12 +252,12 @@ describe("BoostedVotingEscrowDelegate", () => {
             const dt = (await getBlockTimestamp()) - t0;
             expectApproxEqual(
                 await totalSupply(),
-                boosted_alice.div(MAX_DURATION).mul(Math.max(MAX_DURATION - 2 * H - dt, 0)),
+                boosted_alice.div(MAX_DURATION).mul(Math.max(duration - H - dt, 0)),
                 TOL
             );
             expectApproxEqual(
                 await balanceOf(alice),
-                boosted_alice.div(MAX_DURATION).mul(Math.max(MAX_DURATION - 2 * H - dt, 0)),
+                boosted_alice.div(MAX_DURATION).mul(Math.max(duration - H - dt, 0)),
                 TOL
             );
             expectZero(await balanceOf(bob));

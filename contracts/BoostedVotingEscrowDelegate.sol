@@ -52,10 +52,10 @@ contract BoostedVotingEscrowDelegate {
         require(block.timestamp < deadline, "BVED: EXPIRED");
 
         uint256 interval = IVotingEscrow(ve).interval();
-        duration = (duration / interval) * interval; // rounded down to a multiple of interval
-        uint256 amountVE = _amountVE(amountToken, duration, discounted);
+        uint256 unlockTime = ((block.timestamp + duration) / interval) * interval; // rounded down to a multiple of interval
+        uint256 amountVE = _amountVE(amountToken, unlockTime - block.timestamp, discounted);
 
-        IVotingEscrow(ve).createLockFor(msg.sender, amountVE, amountVE - amountToken, block.timestamp + duration);
+        IVotingEscrow(ve).createLockFor(msg.sender, amountVE, amountVE - amountToken, unlockTime);
     }
 
     function increaseAmountDiscounted(uint256 amountToken) external eligibleForDiscount {
