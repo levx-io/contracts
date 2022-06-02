@@ -113,7 +113,7 @@ describe("LPVotingEscrowDelegate", () => {
         await ethers.provider.send("hardhat_reset", []);
     });
 
-    it("should createLock() and withdraw() with newly minted one LP token each time", async () => {
+    it("should createLock() and withdraw() with increasing LP", async () => {
         const { pair, ve, delegate, alice, totalSupply, balanceOf, mintLPToken, getTokensInLP } = await setupTest();
 
         await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
@@ -152,17 +152,7 @@ describe("LPVotingEscrowDelegate", () => {
             if (amountVE_alice.gt(amountToken_alice.mul(333).div(10))) {
                 amountVE_alice = amountToken_alice.mul(333).div(10);
             }
-            log(
-                i,
-                "lpTotal",
-                utils.formatEther(lpTotal),
-                "amountLP",
-                utils.formatEther(amountLP),
-                "amountVE",
-                utils.formatEther(amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - 2 * H)),
-                "boost",
-                MAX_BOOST.mul(100).mul(circulatingLP).div(lpTotal.pow(2)).toNumber() / 100
-            );
+            log(i, lpTotal, amountLP, MAX_BOOST.mul(100).mul(circulatingLP).div(lpTotal.pow(2)).toNumber() / 100);
             expectApproxEqual(await totalSupply(), amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - 2 * H), TOL);
             expectApproxEqual(await balanceOf(alice), amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - H), TOL);
 
@@ -178,7 +168,7 @@ describe("LPVotingEscrowDelegate", () => {
         }
     });
 
-    it("should createLock() and increaseAmount() with increasing LP out of a fixed total supply", async () => {
+    it("should createLock() and increaseAmount() with increasing amount out of fixed LP", async () => {
         const { pair, delegate, alice, totalSupply, balanceOf, mintLPToken, getTokensInLP } = await setupTest();
 
         await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
@@ -226,11 +216,8 @@ describe("LPVotingEscrowDelegate", () => {
             amountVE_alice = amountVE_alice.add(amount);
             log(
                 i,
-                "circulatingLP",
-                utils.formatEther(circulatingLP),
-                "lpLocked",
-                utils.formatEther(lpLockedTotal),
-                "boost",
+                lpTotal,
+                lpLockedTotal,
                 MAX_BOOST.mul(100).mul(circulatingLP).div(lpTotal).div(lpTotal).toNumber() / 100
             );
             expectApproxEqual(
@@ -248,10 +235,149 @@ describe("LPVotingEscrowDelegate", () => {
             await mine();
         }
     });
+
+    it("should createLock() and withdraw() with decreasing LP", async () => {
+        const { pair, ve, delegate, alice, totalSupply, balanceOf, mintLPToken, burnLPToken, getTokensInLP } =
+            await setupTest();
+
+        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
+
+        expectZero(await totalSupply());
+        expectZero(await balanceOf(alice));
+
+        await mintLPToken(alice, ONE.mul(100));
+        expect(await pair.totalSupply()).to.be.equal(ONE.mul(100));
+        expect(await pair.balanceOf(alice.address)).to.be.equal(ONE.mul(100).sub(MINIMUM_LIQUIDITY));
+
+        for (let i = 0; i < 100; i++) {
+            const lpTotal = await pair.totalSupply();
+            const circulatingLP = lpTotal;
+            const amountLP = ONE.sub(i === 99 ? MINIMUM_LIQUIDITY : 0);
+            const balanceLP_alice = circulatingLP.sub(MINIMUM_LIQUIDITY);
+            expect(lpTotal).to.be.equal(ONE.mul(100).sub(ONE.mul(i)));
+            expect(await pair.balanceOf(alice.address)).to.be.equal(balanceLP_alice);
+
+            // Move to timing which is good for testing - beginning of a UTC week
+            const ts = await getBlockTimestamp();
+            await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+            await mine();
+
+            await delegate.connect(alice).createLock(amountLP, MAX_DURATION);
+
+            await sleep(H);
+            await mine();
+
+            expect(await pair.balanceOf(alice.address)).to.be.equal(balanceLP_alice.sub(amountLP));
+            expect(await delegate.locked(alice.address)).to.be.equal(amountLP);
+            expect(await delegate.lockedTotal()).to.be.equal(amountLP);
+
+            const amountToken_alice = await getTokensInLP(amountLP);
+            let amountVE_alice = amountToken_alice.add(
+                amountToken_alice.mul(MAX_BOOST).mul(circulatingLP).div(lpTotal.pow(2))
+            );
+            if (amountVE_alice.gt(amountToken_alice.mul(333).div(10))) {
+                amountVE_alice = amountToken_alice.mul(333).div(10);
+            }
+            log(i, lpTotal, amountLP, MAX_BOOST.mul(100).mul(circulatingLP).div(lpTotal).div(lpTotal).toNumber() / 100);
+            expectApproxEqual(await totalSupply(), amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - 2 * H), TOL);
+            expectApproxEqual(await balanceOf(alice), amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - H), TOL);
+
+            await sleep(MAX_DURATION);
+            await mine();
+
+            expectZero(await balanceOf(alice));
+            await ve.connect(alice).withdraw();
+            await delegate.connect(alice).withdraw();
+
+            expectZero(await totalSupply());
+            expectZero(await balanceOf(alice));
+
+            await burnLPToken(alice, amountLP);
+        }
+    });
+
+    it("should createLock() and increaseAmount() with increasing LP", async () => {
+        const { pair, delegate, alice, totalSupply, balanceOf, mintLPToken, getTokensInLP } = await setupTest();
+
+        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
+
+        expectZero(await totalSupply());
+        expectZero(await balanceOf(alice));
+
+        // Move to timing which is good for testing - beginning of a UTC week
+        const ts = await getBlockTimestamp();
+        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await mine();
+
+        let lpLockedTotal = constants.Zero;
+        let amountVE_alice = constants.Zero;
+        for (let i = 0; i < 100; i++) {
+            await mintLPToken(alice, ONE);
+            const lpTotal = await pair.totalSupply();
+            const circulatingLP = lpTotal.sub(lpLockedTotal);
+            const amountLP = ONE.sub(i === 0 ? MINIMUM_LIQUIDITY : 0);
+            expect(lpTotal).to.be.equal(ONE.mul(i + 1));
+            expect(await pair.balanceOf(alice.address)).to.be.equal(amountLP);
+
+            await sleep(H);
+            await mine();
+
+            if (i === 0) {
+                await delegate.connect(alice).createLock(amountLP, MAX_DURATION);
+            } else {
+                await delegate.connect(alice).increaseAmount(amountLP);
+            }
+            lpLockedTotal = lpLockedTotal.add(amountLP);
+
+            await sleep(H);
+            await mine();
+
+            expectZero(await pair.balanceOf(alice.address));
+            expect(await delegate.locked(alice.address)).to.be.equal(lpLockedTotal);
+            expect(await delegate.lockedTotal()).to.be.equal(lpLockedTotal);
+
+            const amountToken_alice = await getTokensInLP(amountLP);
+            let amount = amountToken_alice.add(
+                amountToken_alice.mul(MAX_BOOST).mul(circulatingLP).div(lpTotal).div(lpTotal)
+            );
+            if (amount.gt(amountToken_alice.mul(333).div(10))) {
+                amount = amountToken_alice.mul(333).div(10);
+            }
+            amountVE_alice = amountVE_alice.add(amount);
+            log(
+                i,
+                lpTotal,
+                lpLockedTotal,
+                MAX_BOOST.mul(100).mul(circulatingLP).div(lpTotal).div(lpTotal).toNumber() / 100
+            );
+            expectApproxEqual(
+                await totalSupply(),
+                amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - 2 * H - i * DAY),
+                TOL
+            );
+            expectApproxEqual(
+                await balanceOf(alice),
+                amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - 2 * H - i * DAY),
+                TOL
+            );
+
+            await sleep(DAY - 2 * H);
+            await mine();
+        }
+    });
 });
 
-const log = (...values) => {
+const log = (i, lpTotal, lpLocked, boost) => {
     if (!LOG_OFF) {
-        console.log(...values);
+        console.log(
+            i +
+                "\t" +
+                Number(utils.formatEther(lpLocked)).toFixed(18) +
+                "\t" +
+                Number(utils.formatEther(lpTotal)).toFixed(18) +
+                "\t" +
+                boost.toFixed(2).toString().padStart(7, " ") +
+                "x"
+        );
     }
 };
