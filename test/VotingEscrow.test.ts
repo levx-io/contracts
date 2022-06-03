@@ -13,7 +13,7 @@ import {
     sleep,
 } from "./utils";
 import { BigNumber, constants, Signer } from "ethers";
-import { ERC20Mock, VotingEscrow } from "../typechain";
+import { ERC20Mock, VotingEscrow, VotingEscrowMigratorMock } from "../typechain";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signers";
 
 ethers.utils.Logger.setLogLevel(ethers.utils.Logger.levels.ERROR); // turn off warnings
@@ -36,6 +36,9 @@ const setupTest = async () => {
     const VE = await ethers.getContractFactory("VotingEscrow");
     const ve = (await VE.deploy(token.address, "veToken", "VE", INTERVAL, MAXTIME)) as VotingEscrow;
 
+    const Migrator = await ethers.getContractFactory("VotingEscrowMigratorMock");
+    const migrator = (await Migrator.deploy(ve.address)) as VotingEscrowMigratorMock;
+
     const totalSupply = async (): Promise<BigNumber> => await ve["totalSupply()"]();
     const totalSupplyAt = async (block: number): Promise<BigNumber> => await ve.totalSupplyAt(block);
     const balanceOf = async (account: SignerWithAddress): Promise<BigNumber> =>
@@ -48,6 +51,7 @@ const setupTest = async () => {
         bob,
         token,
         ve,
+        migrator,
         totalSupply,
         totalSupplyAt,
         balanceOf,
@@ -308,5 +312,99 @@ describe("VotingEscrow", () => {
         expectZero(await totalSupplyAt(stages["bob_withdraw_2"].number));
         expectZero(await balanceOfAt(alice, stages["bob_withdraw_2"].number));
         expectZero(await balanceOfAt(bob, stages["bob_withdraw_2"].number));
+    });
+
+    it("should cancel()", async () => {
+        const { token, ve, alice, bob } = await setupTest();
+
+        const amount = constants.WeiPerEther.mul(1000);
+        await token.connect(alice).transfer(bob.address, amount);
+
+        await token.connect(alice).approve(ve.address, amount.mul(10));
+        await token.connect(bob).approve(ve.address, amount.mul(10));
+
+        // Move to timing which is good for testing - beginning of a UTC week
+        let ts = await getBlockTimestamp();
+        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await mine();
+
+        let unlockTime = Math.floor(((await getBlockTimestamp()) + INTERVAL) / INTERVAL) * INTERVAL;
+        await ve.connect(alice).createLock(amount, unlockTime);
+
+        let balance = await token.balanceOf(alice.address);
+        await sleep(DAY);
+
+        const duration = unlockTime - (await getBlockTimestamp());
+        await ve.connect(alice).cancel();
+
+        let penalty = amount.mul(unlockTime - (await getBlockTimestamp())).div(duration);
+        expect(await token.balanceOf(alice.address)).to.be.equal(balance.add(amount.sub(penalty)));
+        expectZero(await ve.unlockTime(alice.address));
+
+        // Move to timing which is good for testing - beginning of a UTC week
+        ts = await getBlockTimestamp();
+        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await mine();
+
+        unlockTime = Math.floor(((await getBlockTimestamp()) + INTERVAL) / INTERVAL) * INTERVAL;
+        await ve.connect(alice).createLock(amount, unlockTime);
+
+        await sleep(DAY);
+        await ve.connect(alice).increaseAmount(amount);
+
+        balance = await token.balanceOf(alice.address);
+        await sleep(DAY);
+
+        await ve.connect(alice).cancel();
+
+        penalty = amount;
+        expect(await token.balanceOf(alice.address)).to.be.equal(balance.add(amount.mul(2).sub(penalty)));
+        expectZero(await ve.unlockTime(alice.address));
+
+        // Move to timing which is good for testing - beginning of a UTC week
+        ts = await getBlockTimestamp();
+        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await mine();
+
+        unlockTime = (await getBlockTimestamp()) + INTERVAL;
+        await ve.connect(alice).createLock(amount, unlockTime);
+
+        await sleep(INTERVAL);
+        await expect(ve.connect(alice).cancel()).to.be.revertedWith("VE: LOCK_EXPIRED");
+        await ve.connect(alice).withdraw();
+    });
+
+    it("should migrate()", async () => {
+        const { token, ve, migrator, alice, bob } = await setupTest();
+
+        const amount = constants.WeiPerEther.mul(1000);
+        await token.connect(alice).transfer(bob.address, amount);
+
+        await token.connect(alice).approve(ve.address, amount.mul(10));
+        await token.connect(bob).approve(ve.address, amount.mul(10));
+
+        // Move to timing which is good for testing - beginning of a UTC week
+        const ts = await getBlockTimestamp();
+        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await mine();
+
+        const unlockTime = (await getBlockTimestamp()) + INTERVAL;
+        await ve.connect(alice).createLock(amount, unlockTime);
+
+        await expect(ve.connect(alice).migrate()).to.be.revertedWith("VE: MIGRATOR_NOT_SET");
+
+        await ve.setMigrator(migrator.address);
+        await expect(ve.setMigrator(alice.address)).to.be.revertedWith("VE: MIGRATOR_SET");
+
+        await ve.connect(alice).increaseAmount(amount);
+        await ve.connect(alice).migrate();
+
+        expectZero(await ve.unlockTime(alice.address));
+        await expect(ve.connect(alice).increaseAmount(amount)).to.be.revertedWith("VE: LOCK_MIGRATED");
+        await expect(ve.connect(alice).migrate()).to.be.revertedWith("VE: LOCK_MIGRATED");
+
+        const { amount: value, end } = await migrator.locked(alice.address);
+        expect(value).to.be.equal(amount.mul(2));
+        expect(end).to.be.equal(unlockTime);
     });
 });

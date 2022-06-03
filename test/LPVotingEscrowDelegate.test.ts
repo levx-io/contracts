@@ -10,6 +10,7 @@ import {
     UniswapV2Factory,
     UniswapV2Pair,
     VotingEscrow,
+    VotingEscrowMigratorMock,
 } from "../typechain";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signers";
 
@@ -49,6 +50,9 @@ const setupTest = async () => {
 
     const VE = await ethers.getContractFactory("VotingEscrow");
     const ve = (await VE.deploy(token.address, "veToken", "VE", INTERVAL, MAX_DURATION)) as VotingEscrow;
+
+    const Migrator = await ethers.getContractFactory("VotingEscrowMigratorMock");
+    const migrator = (await Migrator.deploy(ve.address)) as VotingEscrowMigratorMock;
 
     const DiscountToken = await ethers.getContractFactory("NFTMock");
     const discountToken = (await DiscountToken.deploy("Discount", "DISC")) as NFTMock;
@@ -97,6 +101,7 @@ const setupTest = async () => {
         token,
         pair,
         ve,
+        migrator,
         delegate,
         totalSupply,
         totalSupplyAt,
@@ -364,6 +369,42 @@ describe("LPVotingEscrowDelegate", () => {
             await sleep(DAY - 2 * H);
             await mine();
         }
+    });
+
+    it("should withdraw() after migrate()", async () => {
+        const { pair, ve, migrator, delegate, alice, totalSupply, balanceOf, mintLPToken } = await setupTest();
+
+        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
+
+        expectZero(await totalSupply());
+        expectZero(await balanceOf(alice));
+
+        await mintLPToken(alice, ONE);
+        const lpTotal = await pair.totalSupply();
+        const amountLP = ONE.sub(MINIMUM_LIQUIDITY);
+        expect(lpTotal).to.be.equal(ONE);
+        expect(await pair.balanceOf(alice.address)).to.be.equal(amountLP);
+
+        // Move to timing which is good for testing - beginning of a UTC week
+        const ts = await getBlockTimestamp();
+        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await mine();
+
+        await delegate.connect(alice).createLock(amountLP, INTERVAL);
+
+        await ve.setMigrator(migrator.address);
+        await ve.connect(alice).migrate();
+
+        expectZero(await ve.unlockTime(alice.address));
+        await expect(delegate.connect(alice).withdraw()).to.be.revertedWith("LSVED: EXISTING_LOCK_FOUND");
+
+        await sleep(INTERVAL);
+
+        await ve.connect(alice).withdraw();
+        await expect(delegate.connect(alice).withdraw()).to.be.revertedWith("LSVED: EXISTING_LOCK_FOUND");
+
+        await migrator.connect(alice).withdraw();
+        await delegate.connect(alice).withdraw();
     });
 });
 

@@ -4,6 +4,7 @@ pragma solidity ^0.8.14;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./uniswapv2/interfaces/IUniswapV2Pair.sol";
 import "./VotingEscrowDelegate.sol";
+import "./interfaces/IVotingEscrowMigrator.sol";
 
 contract LPVotingEscrowDelegate is VotingEscrowDelegate {
     using SafeERC20 for IERC20;
@@ -75,8 +76,13 @@ contract LPVotingEscrowDelegate is VotingEscrowDelegate {
     }
 
     function withdraw() external {
-        uint256 unlockTime = IVotingEscrow(ve).unlockTime(msg.sender);
-        require(unlockTime == 0, "LSVED: LOCK_NOT_WITHDRAWN");
+        uint256 unlockTime;
+        if (IVotingEscrow(ve).migrated(msg.sender)) {
+            unlockTime = IVotingEscrowMigrator(IVotingEscrow(ve).migrator()).unlockTime(msg.sender);
+        } else {
+            unlockTime = IVotingEscrow(ve).unlockTime(msg.sender);
+        }
+        require(unlockTime == 0, "LSVED: EXISTING_LOCK_FOUND");
 
         uint256 amount = locked[msg.sender];
         require(amount > 0, "LSVED: LOCK_NOT_FOUND");

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 interface IVotingEscrow {
+    event SetMigrator(address indexed account);
     event SetMiddleman(address indexed account, bool isMiddleman);
     event Deposit(
         address indexed provider,
@@ -11,7 +12,9 @@ interface IVotingEscrow {
         int128 _type,
         uint256 ts
     );
+    event Cancel(address indexed provider, uint256 value, uint256 penalty, uint256 ts);
     event Withdraw(address indexed provider, uint256 value, uint256 discount, uint256 ts);
+    event Migrate(address indexed provider, uint256 value, uint256 discount, uint256 ts);
     event Supply(uint256 prevSupply, uint256 supply);
 
     function interval() external view returns (uint256);
@@ -26,6 +29,10 @@ interface IVotingEscrow {
 
     function decimals() external view returns (uint8);
 
+    function migrator() external view returns (address);
+
+    function migrated(address account) external view returns (bool);
+
     function isMiddleman(address account) external view returns (bool);
 
     function supply() external view returns (uint256);
@@ -35,7 +42,8 @@ interface IVotingEscrow {
         view
         returns (
             int128 amount,
-            uint256 discount,
+            int128 discount,
+            uint256 duration,
             uint256 end
         );
 
@@ -71,6 +79,8 @@ interface IVotingEscrow {
 
     function unlockTime(address _addr) external view returns (uint256);
 
+    function setMigrator(address _migrator) external;
+
     function setMiddleman(address account, bool _isMiddleman) external;
 
     function checkpoint() external;
@@ -96,7 +106,11 @@ interface IVotingEscrow {
 
     function increaseUnlockTime(uint256 _unlock_time) external;
 
+    function cancel() external;
+
     function withdraw() external;
+
+    function migrate() external;
 
     function balanceOf(address addr) external view returns (uint256);
 
