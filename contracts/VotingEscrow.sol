@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/IVotingEscrowMigrator.sol";
+import "./interfaces/IVotingEscrowDelegate.sol";
 import "./libraries/Integers.sol";
 
 /**
@@ -65,10 +66,11 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
     uint8 public immutable override decimals;
 
     address public override migrator;
-    mapping(address => bool) public override migrated;
     mapping(address => bool) public override isDelegate;
 
     uint256 public override supply;
+    mapping(address => bool) public override migrated;
+    mapping(address => address[]) public override delegateAt;
     mapping(address => LockedBalance) public override locked;
     uint256 public override epoch;
 
@@ -96,12 +98,12 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         pointHistory[0].ts = block.timestamp;
     }
 
-    modifier beforeMigrated {
-        require(!migrated[msg.sender], "VE: LOCK_MIGRATED");
+    modifier beforeMigrated(address addr) {
+        require(!migrated[addr], "VE: LOCK_MIGRATED");
         _;
     }
 
-    modifier calledByDelegate {
+    modifier onlyDelegate {
         require(isDelegate[msg.sender], "VE: NOT_DELEGATE");
         _;
     }
@@ -114,6 +116,10 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
             require(isDelegate[msg.sender], "VE: CONTRACT_NOT_DELEGATE");
         }
         _;
+    }
+
+    function delegateLength(address addr) external view returns (uint256) {
+        return delegateAt[addr].length;
     }
 
     /**
@@ -334,6 +340,18 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         emit Supply(supply_before, supply_before + _value);
     }
 
+    function _pushDelegate(address addr, address delegate) internal {
+        bool found;
+        address[] storage delegates = delegateAt[addr];
+        for (uint256 i; i < delegates.length; ) {
+            if (delegates[i] == delegate) found = true;
+            unchecked {
+                ++i;
+            }
+        }
+        if (!found) delegateAt[addr].push(delegate);
+    }
+
     /**
      * @notice Record global data to checkpoint
      */
@@ -348,7 +366,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
      * @param _addr User's wallet address
      * @param _value Amount to add to user's lock
      */
-    function depositFor(address _addr, uint256 _value) external override nonReentrant beforeMigrated {
+    function depositFor(address _addr, uint256 _value) external override nonReentrant beforeMigrated(_addr) {
         LockedBalance memory _locked = locked[_addr];
 
         require(_value > 0, "VE: INVALID_VALUE");
@@ -371,7 +389,9 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         uint256 _value,
         uint256 _discount,
         uint256 _unlock_time
-    ) external override nonReentrant calledByDelegate beforeMigrated {
+    ) external override nonReentrant onlyDelegate beforeMigrated(_addr) {
+        _pushDelegate(_addr, msg.sender);
+
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to a multiple of interval
         LockedBalance memory _locked = locked[_addr];
 
@@ -389,7 +409,13 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
      * @param _value Amount to deposit
      * @param _unlock_time Epoch time when tokens unlock, rounded down to whole weeks
      */
-    function createLock(uint256 _value, uint256 _unlock_time) external override nonReentrant authorized beforeMigrated {
+    function createLock(uint256 _value, uint256 _unlock_time)
+        external
+        override
+        nonReentrant
+        authorized
+        beforeMigrated(msg.sender)
+    {
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to a multiple of interval
         LockedBalance memory _locked = locked[msg.sender];
 
@@ -412,7 +438,9 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         address _addr,
         uint256 _value,
         uint256 _discount
-    ) external override nonReentrant calledByDelegate beforeMigrated {
+    ) external override nonReentrant onlyDelegate beforeMigrated(_addr) {
+        _pushDelegate(_addr, msg.sender);
+
         LockedBalance memory _locked = locked[_addr];
 
         require(_value > 0, "VE: INVALID_VALUE");
@@ -428,7 +456,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
      *          without modifying the unlock time
      * @param _value Amount of tokens to deposit and add to the lock
      */
-    function increaseAmount(uint256 _value) external override nonReentrant authorized beforeMigrated {
+    function increaseAmount(uint256 _value) external override nonReentrant authorized beforeMigrated(msg.sender) {
         LockedBalance memory _locked = locked[msg.sender];
 
         require(_value > 0, "VE: INVALID_VALUE");
@@ -442,7 +470,13 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
      * @notice Extend the unlock time for `msg.sender` to `_unlock_time`
      * @param _unlock_time New epoch time for unlocking
      */
-    function increaseUnlockTime(uint256 _unlock_time) external override nonReentrant authorized beforeMigrated {
+    function increaseUnlockTime(uint256 _unlock_time)
+        external
+        override
+        nonReentrant
+        authorized
+        beforeMigrated(msg.sender)
+    {
         LockedBalance memory _locked = locked[msg.sender];
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to a multiple of interval
 
@@ -459,38 +493,26 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
      * @notice Cancel the existing lock of `msg.sender` with penalty
      * @dev Only possible if the lock exists
      */
-    function cancel() external override {
+    function cancel() external override nonReentrant {
         LockedBalance memory _locked = locked[msg.sender];
         require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
 
+        uint256 penaltyRate = _penaltyRate(_locked.duration, _locked.end);
+        uint256 supply_before = _clear(_locked, penaltyRate);
+
         uint256 value = _locked.amount.toUint256();
         uint256 discount = _locked.discount.toUint256();
-        require(value > discount, "VE: FULLY_DISCOUNTED");
 
-        locked[msg.sender] = LockedBalance(0, 0, 0, 0);
-        uint256 supply_before = supply;
-        supply = supply_before - value;
+        IERC20(token).safeTransfer(msg.sender, ((value - discount) * (1e18 - penaltyRate)) / 1e18);
 
-        // old_locked can have either expired <= timestamp or zero end
-        // _locked has only 0 end
-        // Both can have >= 0 amount
-        _checkpoint(msg.sender, _locked, LockedBalance(0, 0, 0, 0));
-
-        uint256 penalty = _penalty(value - discount, _locked.duration, _locked.end);
-        IERC20(token).safeTransfer(msg.sender, value - discount - penalty);
-
-        emit Cancel(msg.sender, value, penalty, block.timestamp);
+        emit Cancel(msg.sender, value, discount, penaltyRate, block.timestamp);
         emit Supply(supply_before, supply_before - value);
     }
 
-    function _penalty(
-        uint256 amount,
-        uint256 duration,
-        uint256 end
-    ) internal view returns (uint256 penalty) {
-        penalty = (amount * (end - block.timestamp)) / duration;
-        if (penalty < amount / 2) penalty = amount / 2;
+    function _penaltyRate(uint256 duration, uint256 end) internal view returns (uint256 penalty) {
+        penalty = (1e18 * (end - block.timestamp)) / duration;
+        if (penalty < 1e18 / 2) penalty = 1e18 / 2;
     }
 
     /**
@@ -501,17 +523,10 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         LockedBalance memory _locked = locked[msg.sender];
         require(block.timestamp >= _locked.end, "VE: LOCK_NOT_EXPIRED");
 
+        uint256 supply_before = _clear(_locked, 0);
+
         uint256 value = _locked.amount.toUint256();
         uint256 discount = _locked.discount.toUint256();
-
-        locked[msg.sender] = LockedBalance(0, 0, 0, 0);
-        uint256 supply_before = supply;
-        supply = supply_before - value;
-
-        // old_locked can have either expired <= timestamp or zero end
-        // _locked has only 0 end
-        // Both can have >= 0 amount
-        _checkpoint(msg.sender, _locked, LockedBalance(0, 0, 0, 0));
 
         if (value > discount) {
             IERC20(token).safeTransfer(msg.sender, value - discount);
@@ -521,24 +536,18 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         emit Supply(supply_before, supply_before - value);
     }
 
-    function migrate() external override nonReentrant beforeMigrated {
+    function migrate() external override nonReentrant beforeMigrated(msg.sender) {
         require(migrator != address(0), "VE: MIGRATOR_NOT_SET");
 
         LockedBalance memory _locked = locked[msg.sender];
+        require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
+        require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
+
+        uint256 supply_before = _clear(_locked, 0);
 
         uint256 value = _locked.amount.toUint256();
         uint256 discount = _locked.discount.toUint256();
 
-        locked[msg.sender] = LockedBalance(0, 0, 0, 0);
-        uint256 supply_before = supply;
-        supply = supply_before - value;
-
-        // old_locked can have either expired <= timestamp or zero end
-        // _locked has only 0 end
-        // Both can have >= 0 amount
-        _checkpoint(msg.sender, _locked, LockedBalance(0, 0, 0, 0));
-
-        migrated[msg.sender] = true;
         IVotingEscrowMigrator(migrator).migrate(
             msg.sender,
             _locked.amount,
@@ -546,6 +555,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
             _locked.duration,
             _locked.end
         );
+        migrated[msg.sender] = true;
 
         if (value > discount) {
             IERC20(token).safeTransfer(migrator, value - discount);
@@ -553,6 +563,28 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
 
         emit Migrate(msg.sender, value, discount, block.timestamp);
         emit Supply(supply_before, supply_before - value);
+    }
+
+    function _clear(LockedBalance memory _locked, uint256 penaltyRate) internal returns (uint256 supply_before) {
+        uint256 value = _locked.amount.toUint256();
+
+        locked[msg.sender] = LockedBalance(0, 0, 0, 0);
+        supply_before = supply;
+        supply = supply_before - value;
+
+        // old_locked can have either expired <= timestamp or zero end
+        // _locked has only 0 end
+        // Both can have >= 0 amount
+        _checkpoint(msg.sender, _locked, LockedBalance(0, 0, 0, 0));
+
+        address[] storage delegates = delegateAt[msg.sender];
+        for (uint256 i; i < delegates.length; ) {
+            IVotingEscrowDelegate(delegates[i]).withdraw(msg.sender, penaltyRate);
+            unchecked {
+                ++i;
+            }
+        }
+        delete delegateAt[msg.sender];
     }
 
     // The following ERC20/minime-compatible methods are not real balanceOf and supply!

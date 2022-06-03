@@ -31,12 +31,8 @@ contract VotingEscrowMigratorMock is IVotingEscrowMigrator {
         int128 discount,
         uint256 duration,
         uint256 end
-    ) external {
+    ) external override {
         locked[account] = LockedBalance(amount, discount, duration, end);
-    }
-
-    function unlockTime(address _addr) external view returns (uint256) {
-        return locked[_addr].end;
     }
 
     function withdraw() external {

@@ -9,13 +9,13 @@ contract BoostedVotingEscrowDelegate is VotingEscrowDelegate {
     uint256 public immutable deadline;
 
     constructor(
-        address _token,
         address _ve,
+        address _token,
         address _discountToken,
         uint256 _minDuration,
         uint256 _maxBoost,
         uint256 _deadline
-    ) VotingEscrowDelegate(_token, _ve, _discountToken) {
+    ) VotingEscrowDelegate(_ve, _token, _discountToken) {
         minDuration = _minDuration;
         maxBoost = _maxBoost;
         deadline = _deadline;

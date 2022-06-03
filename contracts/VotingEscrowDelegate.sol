@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.14;
 
+import "./interfaces/IVotingEscrowDelegate.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/INFT.sol";
 
-abstract contract VotingEscrowDelegate {
-    address public immutable token;
+abstract contract VotingEscrowDelegate is IVotingEscrowDelegate {
     address public immutable ve;
+    address public immutable token;
     address public immutable discountToken;
 
     uint256 internal immutable _maxDuration;
@@ -16,12 +17,12 @@ abstract contract VotingEscrowDelegate {
     event IncreaseAmount(address indexed account, uint256 amount, uint256 discount);
 
     constructor(
-        address _token,
         address _ve,
+        address _token,
         address _discountToken
     ) {
-        token = _token;
         ve = _ve;
+        token = _token;
         discountToken = _discountToken;
 
         _maxDuration = IVotingEscrow(_ve).maxDuration();
@@ -84,4 +85,8 @@ abstract contract VotingEscrowDelegate {
         view
         virtual
         returns (uint256 amountVE, uint256 amountToken);
+
+    function withdraw(address, uint256) external virtual override {
+        // Empty
+    }
 }

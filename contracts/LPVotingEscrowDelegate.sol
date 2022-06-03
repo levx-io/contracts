@@ -9,6 +9,11 @@ import "./interfaces/IVotingEscrowMigrator.sol";
 contract LPVotingEscrowDelegate is VotingEscrowDelegate {
     using SafeERC20 for IERC20;
 
+    struct LockedBalance {
+        uint256 amount;
+        uint256 end;
+    }
+
     bool internal immutable isToken1;
     uint256 public immutable minAmount;
     uint256 public immutable maxBoost;
@@ -16,16 +21,14 @@ contract LPVotingEscrowDelegate is VotingEscrowDelegate {
     uint256 public lockedTotal;
     mapping(address => uint256) public locked;
 
-    event Withdraw(address indexed account, uint256 amount);
-
     constructor(
-        address _lpToken,
         address _ve,
+        address _lpToken,
         address _discountToken,
         bool _isToken1,
         uint256 _minAmount,
         uint256 _maxBoost
-    ) VotingEscrowDelegate(_lpToken, _ve, _discountToken) {
+    ) VotingEscrowDelegate(_ve, _lpToken, _discountToken) {
         isToken1 = _isToken1;
         minAmount = _minAmount;
         maxBoost = _maxBoost;
@@ -75,22 +78,16 @@ contract LPVotingEscrowDelegate is VotingEscrowDelegate {
         amountToken = 0;
     }
 
-    function withdraw() external {
-        uint256 unlockTime;
-        if (IVotingEscrow(ve).migrated(msg.sender)) {
-            unlockTime = IVotingEscrowMigrator(IVotingEscrow(ve).migrator()).unlockTime(msg.sender);
-        } else {
-            unlockTime = IVotingEscrow(ve).unlockTime(msg.sender);
-        }
-        require(unlockTime == 0, "LSVED: EXISTING_LOCK_FOUND");
+    function withdraw(address addr, uint256 penaltyRate) external override {
+        require(msg.sender == ve, "LSVED: FORBIDDEN");
 
-        uint256 amount = locked[msg.sender];
+        uint256 amount = locked[addr];
         require(amount > 0, "LSVED: LOCK_NOT_FOUND");
 
         lockedTotal -= amount;
-        locked[msg.sender] = 0;
-        IERC20(token).safeTransfer(msg.sender, amount);
+        locked[addr] = 0;
+        IERC20(token).safeTransfer(addr, (amount * (1e18 - penaltyRate)) / 1e18);
 
-        emit Withdraw(msg.sender, amount);
+        emit Withdraw(addr, amount, penaltyRate);
     }
 }

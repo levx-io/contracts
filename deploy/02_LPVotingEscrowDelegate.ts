@@ -13,7 +13,7 @@ export default async ({ getNamedAccounts, deployments }) => {
 
     const { address } = await deploy("LPVotingEscrowDelegate", {
         from: deployer,
-        args: [LP_TOKEN, ve.address, DISCOUNT_TOKEN, true, MIN_AMOUNT, MAX_BOOST],
+        args: [ve.address, LP_TOKEN, DISCOUNT_TOKEN, true, MIN_AMOUNT, MAX_BOOST],
         log: true,
     });
     await execute("VotingEscrow", { from: deployer, log: true }, "setDelegate", address, true);

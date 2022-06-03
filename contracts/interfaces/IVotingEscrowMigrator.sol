@@ -9,6 +9,4 @@ interface IVotingEscrowMigrator {
         uint256 duration,
         uint256 end
     ) external;
-
-    function unlockTime(address _addr) external view returns (uint256);
 }

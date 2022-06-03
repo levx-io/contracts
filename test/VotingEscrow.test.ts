@@ -26,6 +26,8 @@ const INTERVAL = NUMBER_OF_DAYS * DAY;
 const MAXTIME = Math.floor((2 * 365 * DAY) / INTERVAL) * INTERVAL;
 const TOL = PRECISION_BASE.mul(120).div(INTERVAL);
 
+const PENALTY_BASE = constants.WeiPerEther;
+
 const setupTest = async () => {
     const signers = await ethers.getSigners();
     const [alice, bob] = signers;
@@ -337,8 +339,11 @@ describe("VotingEscrow", () => {
         const duration = unlockTime - (await getBlockTimestamp());
         await ve.connect(alice).cancel();
 
-        let penalty = amount.mul(unlockTime - (await getBlockTimestamp())).div(duration);
-        expect(await token.balanceOf(alice.address)).to.be.equal(balance.add(amount.sub(penalty)));
+        let penaltyRate = PENALTY_BASE.mul(unlockTime - (await getBlockTimestamp())).div(duration);
+        if (penaltyRate.lt(PENALTY_BASE.div(2))) penaltyRate = PENALTY_BASE.div(2);
+        expect((await token.balanceOf(alice.address)).sub(balance)).to.be.equal(
+            amount.mul(PENALTY_BASE.sub(penaltyRate)).div(PENALTY_BASE)
+        );
         expectZero(await ve.unlockTime(alice.address));
 
         // Move to timing which is good for testing - beginning of a UTC week
@@ -357,8 +362,7 @@ describe("VotingEscrow", () => {
 
         await ve.connect(alice).cancel();
 
-        penalty = amount;
-        expect(await token.balanceOf(alice.address)).to.be.equal(balance.add(amount.mul(2).sub(penalty)));
+        expect((await token.balanceOf(alice.address)).sub(balance)).to.be.equal(amount); // Half of the total amount
         expectZero(await ve.unlockTime(alice.address));
 
         // Move to timing which is good for testing - beginning of a UTC week

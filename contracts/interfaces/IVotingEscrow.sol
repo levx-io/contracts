@@ -12,7 +12,7 @@ interface IVotingEscrow {
         int128 _type,
         uint256 ts
     );
-    event Cancel(address indexed provider, uint256 value, uint256 penalty, uint256 ts);
+    event Cancel(address indexed provider, uint256 value, uint256 discount, uint256 penaltyRate, uint256 ts);
     event Withdraw(address indexed provider, uint256 value, uint256 discount, uint256 ts);
     event Migrate(address indexed provider, uint256 value, uint256 discount, uint256 ts);
     event Supply(uint256 prevSupply, uint256 supply);
@@ -31,11 +31,13 @@ interface IVotingEscrow {
 
     function migrator() external view returns (address);
 
-    function migrated(address account) external view returns (bool);
-
     function isDelegate(address account) external view returns (bool);
 
     function supply() external view returns (uint256);
+
+    function migrated(address account) external view returns (bool);
+
+    function delegateAt(address account, uint256 index) external view returns (address);
 
     function locked(address account)
         external
@@ -72,6 +74,8 @@ interface IVotingEscrow {
     function userPointEpoch(address account) external view returns (uint256);
 
     function slopeChanges(uint256 epoch) external view returns (int128);
+
+    function delegateLength(address addr) external view returns (uint256);
 
     function getLastUserSlope(address addr) external view returns (int128);
 

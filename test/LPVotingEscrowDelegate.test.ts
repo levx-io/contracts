@@ -31,6 +31,7 @@ const ONE = constants.WeiPerEther;
 const MIN_AMOUNT = BigNumber.from(10).pow(15).mul(333);
 const MAX_BOOST = BigNumber.from(10).pow(18).mul(1000);
 const MINIMUM_LIQUIDITY = 1000;
+const PENALTY_BASE = ONE;
 
 const setupTest = async () => {
     const signers = await ethers.getSigners();
@@ -59,8 +60,8 @@ const setupTest = async () => {
 
     const Delegate = await ethers.getContractFactory("LPVotingEscrowDelegate");
     const delegate = (await Delegate.deploy(
-        pair.address,
         ve.address,
+        pair.address,
         discountToken.address,
         isToken1,
         MIN_AMOUNT,
@@ -119,7 +120,7 @@ describe("LPVotingEscrowDelegate", () => {
     });
 
     it("should createLock() and withdraw() with increasing LP", async () => {
-        const { pair, ve, delegate, alice, totalSupply, balanceOf, mintLPToken, getTokensInLP } = await setupTest();
+        const { ve, pair, delegate, alice, totalSupply, balanceOf, mintLPToken, getTokensInLP } = await setupTest();
 
         await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
 
@@ -166,7 +167,6 @@ describe("LPVotingEscrowDelegate", () => {
 
             expectZero(await balanceOf(alice));
             await ve.connect(alice).withdraw();
-            await delegate.connect(alice).withdraw();
 
             expectZero(await totalSupply());
             expectZero(await balanceOf(alice));
@@ -242,7 +242,7 @@ describe("LPVotingEscrowDelegate", () => {
     });
 
     it("should createLock() and withdraw() with decreasing LP", async () => {
-        const { pair, ve, delegate, alice, totalSupply, balanceOf, mintLPToken, burnLPToken, getTokensInLP } =
+        const { ve, pair, delegate, alice, totalSupply, balanceOf, mintLPToken, burnLPToken, getTokensInLP } =
             await setupTest();
 
         await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
@@ -292,7 +292,6 @@ describe("LPVotingEscrowDelegate", () => {
 
             expectZero(await balanceOf(alice));
             await ve.connect(alice).withdraw();
-            await delegate.connect(alice).withdraw();
 
             expectZero(await totalSupply());
             expectZero(await balanceOf(alice));
@@ -371,8 +370,103 @@ describe("LPVotingEscrowDelegate", () => {
         }
     });
 
-    it("should withdraw() after migrate()", async () => {
-        const { pair, ve, migrator, delegate, alice, totalSupply, balanceOf, mintLPToken } = await setupTest();
+    it("should cancel()", async () => {
+        const { ve, pair, delegate, migrator, alice, totalSupply, balanceOf, mintLPToken } = await setupTest();
+
+        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
+
+        expectZero(await totalSupply());
+        expectZero(await balanceOf(alice));
+
+        await mintLPToken(alice, ONE.mul(1000));
+        const amountLP = ONE;
+
+        // Move to timing which is good for testing - beginning of a UTC week
+        let ts = await getBlockTimestamp();
+        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await mine();
+
+        const unlockTime = Math.floor(((await getBlockTimestamp()) + INTERVAL) / INTERVAL) * INTERVAL;
+        await delegate.connect(alice).createLock(amountLP, INTERVAL);
+
+        let balance = await pair.balanceOf(alice.address);
+        await sleep(DAY);
+
+        const duration = unlockTime - (await getBlockTimestamp());
+        await ve.connect(alice).cancel();
+
+        let penaltyRate = PENALTY_BASE.mul(unlockTime - (await getBlockTimestamp())).div(duration);
+        if (penaltyRate.lt(PENALTY_BASE.div(2))) penaltyRate = PENALTY_BASE.div(2);
+        expect((await pair.balanceOf(alice.address)).sub(balance)).to.be.equal(
+            amountLP.mul(PENALTY_BASE.sub(penaltyRate)).div(PENALTY_BASE)
+        );
+        expectZero(await ve.unlockTime(alice.address));
+
+        // Move to timing which is good for testing - beginning of a UTC week
+        ts = await getBlockTimestamp();
+        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await mine();
+
+        await delegate.connect(alice).createLock(amountLP, INTERVAL);
+
+        await sleep(DAY);
+        await delegate.connect(alice).increaseAmount(amountLP);
+
+        balance = await pair.balanceOf(alice.address);
+        await sleep(DAY);
+
+        await ve.connect(alice).cancel();
+
+        expect((await pair.balanceOf(alice.address)).sub(balance)).to.be.equal(amountLP); // Half of the total amount
+        expectZero(await ve.unlockTime(alice.address));
+
+        await ve.setMigrator(migrator.address);
+        await expect(ve.connect(alice).migrate()).to.be.revertedWith("VE: LOCK_NOT_FOUND");
+
+        // Move to timing which is good for testing - beginning of a UTC week
+        ts = await getBlockTimestamp();
+        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await mine();
+
+        await delegate.connect(alice).createLock(amountLP, INTERVAL);
+
+        await sleep(INTERVAL);
+        await expect(ve.connect(alice).cancel()).to.be.revertedWith("VE: LOCK_EXPIRED");
+        await ve.connect(alice).withdraw();
+    });
+
+    it("should withdraw()", async () => {
+        const { ve, pair, migrator, delegate, alice, totalSupply, balanceOf, mintLPToken } = await setupTest();
+
+        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
+
+        expectZero(await totalSupply());
+        expectZero(await balanceOf(alice));
+
+        await mintLPToken(alice, ONE);
+        const lpTotal = await pair.totalSupply();
+        const amountLP = ONE.sub(MINIMUM_LIQUIDITY);
+        expect(lpTotal).to.be.equal(ONE);
+        expect(await pair.balanceOf(alice.address)).to.be.equal(amountLP);
+
+        // Move to timing which is good for testing - beginning of a UTC week
+        const ts = await getBlockTimestamp();
+        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await mine();
+
+        await delegate.connect(alice).createLock(amountLP, INTERVAL);
+
+        await sleep(INTERVAL);
+        await ve.connect(alice).withdraw();
+
+        await expect(ve.connect(alice).cancel()).to.be.revertedWith("VE: LOCK_NOT_FOUND");
+
+        await ve.setMigrator(migrator.address);
+        await expect(ve.connect(alice).migrate()).to.be.revertedWith("VE: LOCK_NOT_FOUND");
+    });
+
+    it("should migrate()", async () => {
+        const { ve, pair, migrator, delegate, alice, totalSupply, balanceOf, mintLPToken } = await setupTest();
 
         await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
 
@@ -396,15 +490,12 @@ describe("LPVotingEscrowDelegate", () => {
         await ve.connect(alice).migrate();
 
         expectZero(await ve.unlockTime(alice.address));
-        await expect(delegate.connect(alice).withdraw()).to.be.revertedWith("LSVED: EXISTING_LOCK_FOUND");
+        await expect(ve.connect(alice).cancel()).to.be.revertedWith("VE: LOCK_NOT_FOUND");
 
         await sleep(INTERVAL);
-
         await ve.connect(alice).withdraw();
-        await expect(delegate.connect(alice).withdraw()).to.be.revertedWith("LSVED: EXISTING_LOCK_FOUND");
 
-        await migrator.connect(alice).withdraw();
-        await delegate.connect(alice).withdraw();
+        await expect(delegate.connect(alice).createLock(amountLP, INTERVAL)).to.be.revertedWith("VE: LOCK_MIGRATED");
     });
 });
 

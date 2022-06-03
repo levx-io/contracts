@@ -36,8 +36,8 @@ const setupTest = async () => {
 
     const Delegate = await ethers.getContractFactory("BoostedVotingEscrowDelegate");
     const delegate = (await Delegate.deploy(
-        token.address,
         ve.address,
+        token.address,
         discountToken.address,
         MIN_DURATION,
         MAX_BOOST,
