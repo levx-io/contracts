@@ -66,7 +66,7 @@ const setupTest = async () => {
         MIN_AMOUNT,
         MAX_BOOST
     )) as LPVotingEscrowDelegate;
-    await ve.setMiddleman(delegate.address, true);
+    await ve.setDelegate(delegate.address, true);
 
     const totalSupply = async (): Promise<BigNumber> => await ve["totalSupply()"]();
     const totalSupplyAt = async (block: number): Promise<BigNumber> => await ve.totalSupplyAt(block);

@@ -43,7 +43,7 @@ const setupTest = async () => {
         MAX_BOOST,
         constants.MaxUint256
     )) as BoostedVotingEscrowDelegate;
-    await ve.setMiddleman(delegate.address, true);
+    await ve.setDelegate(delegate.address, true);
 
     const totalSupply = async (): Promise<BigNumber> => await ve["totalSupply()"]();
     const totalSupplyAt = async (block: number): Promise<BigNumber> => await ve.totalSupplyAt(block);

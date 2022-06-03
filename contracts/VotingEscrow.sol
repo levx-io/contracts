@@ -66,7 +66,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
 
     address public override migrator;
     mapping(address => bool) public override migrated;
-    mapping(address => bool) public override isMiddleman;
+    mapping(address => bool) public override isDelegate;
 
     uint256 public override supply;
     mapping(address => LockedBalance) public override locked;
@@ -101,8 +101,8 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         _;
     }
 
-    modifier calledByMiddleman {
-        require(isMiddleman[msg.sender], "VE: NOT_MIDDLEMAN");
+    modifier calledByDelegate {
+        require(isDelegate[msg.sender], "VE: NOT_DELEGATE");
         _;
     }
 
@@ -111,7 +111,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
      */
     modifier authorized {
         if (msg.sender != tx.origin) {
-            require(isMiddleman[msg.sender], "VE: CONTRACT_NOT_MIDDLEMAN");
+            require(isDelegate[msg.sender], "VE: CONTRACT_NOT_DELEGATE");
         }
         _;
     }
@@ -153,10 +153,10 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         emit SetMigrator(_migrator);
     }
 
-    function setMiddleman(address account, bool _isMiddleman) external override onlyOwner {
-        isMiddleman[account] = _isMiddleman;
+    function setDelegate(address account, bool _isDelegate) external override onlyOwner {
+        isDelegate[account] = _isDelegate;
 
-        emit SetMiddleman(account, _isMiddleman);
+        emit SetDelegate(account, _isDelegate);
     }
 
     /**
@@ -371,7 +371,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         uint256 _value,
         uint256 _discount,
         uint256 _unlock_time
-    ) external override nonReentrant calledByMiddleman beforeMigrated {
+    ) external override nonReentrant calledByDelegate beforeMigrated {
         uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to a multiple of interval
         LockedBalance memory _locked = locked[_addr];
 
@@ -412,7 +412,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         address _addr,
         uint256 _value,
         uint256 _discount
-    ) external override nonReentrant calledByMiddleman beforeMigrated {
+    ) external override nonReentrant calledByDelegate beforeMigrated {
         LockedBalance memory _locked = locked[_addr];
 
         require(_value > 0, "VE: INVALID_VALUE");

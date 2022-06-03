@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 interface IVotingEscrow {
     event SetMigrator(address indexed account);
-    event SetMiddleman(address indexed account, bool isMiddleman);
+    event SetDelegate(address indexed account, bool isDelegate);
     event Deposit(
         address indexed provider,
         uint256 value,
@@ -33,7 +33,7 @@ interface IVotingEscrow {
 
     function migrated(address account) external view returns (bool);
 
-    function isMiddleman(address account) external view returns (bool);
+    function isDelegate(address account) external view returns (bool);
 
     function supply() external view returns (uint256);
 
@@ -81,7 +81,7 @@ interface IVotingEscrow {
 
     function setMigrator(address _migrator) external;
 
-    function setMiddleman(address account, bool _isMiddleman) external;
+    function setDelegate(address account, bool _isDelegate) external;
 
     function checkpoint() external;
 
