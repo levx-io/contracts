@@ -1,19 +1,27 @@
 {
-  "name": "@levxdao/tokens",
-  "description": "",
+  "name": "@levxdao/ve",
+  "description": "Voting-escrowed token and its delegates",
   "keywords": [
     "levx",
-    "levx-dao"
+    "levx-dao",
+    "ve",
+    "voting-escrowed"
   ],
-  "homepage": "https://github.com/levxdao/tokens#readme",
+  "homepage": "https://github.com/levxdao/ve#readme",
   "bugs": {
-    "url": "https://github.com/levxdao/tokens/issues",
+    "url": "https://github.com/levxdao/ve/issues",
     "email": "team@levx.io"
   },
   "license": "WTFPL",
   "author": "LevX <team@levx.io>",
+  "files": [
+    "abis",
+    "contracts",
+    "deployments",
+    "typechain"
+  ],
   "scripts": {
-    "build": "hardhat compile",
+    "build": "rimraf abis artifacts cache coverage typechain && hardhat compile",
     "console": "hardhat console",
     "mainnet:deploy": "hardhat --network mainnet deploy",
     "mainnet:verify": "hardhat --network mainnet etherscan-verify --solc-input --license UNLICENSED --force-license",
@@ -76,6 +84,7 @@
     "ethereum-waffle": "^3.3.0",
     "ethers": "^5.3.0",
     "hardhat": "^2.9.3",
+    "hardhat-abi-exporter": "^2.9.0",
     "hardhat-deploy": "^0.8.6",
     "hardhat-deploy-ethers": "^0.3.0-beta.10",
     "hardhat-gas-reporter": "^1.0.0",
