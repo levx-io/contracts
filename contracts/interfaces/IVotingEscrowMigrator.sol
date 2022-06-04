@@ -6,7 +6,7 @@ interface IVotingEscrowMigrator {
         address account,
         int128 amount,
         int128 discount,
-        uint256 duration,
+        uint256 start,
         uint256 end,
         address[] calldata delegates
     ) external;

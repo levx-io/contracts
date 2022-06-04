@@ -88,7 +88,7 @@ const setupTest = async () => {
  *
  *  After the test is done, check all over again with balanceOfAt / totalSupplyAt
  **/
-describe("VotingEscrow", () => {
+describe.only("VotingEscrow", () => {
     beforeEach(async () => {
         await ethers.provider.send("hardhat_reset", []);
     });
@@ -314,6 +314,43 @@ describe("VotingEscrow", () => {
         expectZero(await totalSupplyAt(stages["bob_withdraw_2"].number));
         expectZero(await balanceOfAt(alice, stages["bob_withdraw_2"].number));
         expectZero(await balanceOfAt(bob, stages["bob_withdraw_2"].number));
+    });
+
+    it("should increaseUnlockTime()", async () => {
+        const { token, ve, alice, bob } = await setupTest();
+
+        const amount = constants.WeiPerEther.mul(1000);
+        await token.connect(alice).transfer(bob.address, amount);
+
+        await token.connect(alice).approve(ve.address, amount.mul(10));
+        await token.connect(bob).approve(ve.address, amount.mul(10));
+
+        // Move to timing which is good for testing - beginning of a UTC week
+        let ts = await getBlockTimestamp();
+        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await mine();
+
+        ts = await getBlockTimestamp();
+        await ve.connect(alice).createLock(amount, ts + INTERVAL);
+        let end = divf(ts + INTERVAL, INTERVAL) * INTERVAL;
+        expect(await ve.unlockTime(alice.address)).to.be.equal(end);
+
+        const start = await getBlockTimestamp();
+        await sleep(H);
+
+        await ve.connect(alice).increaseUnlockTime(end + INTERVAL);
+        end = divf(end + INTERVAL, INTERVAL) * INTERVAL;
+        expect(await ve.unlockTime(alice.address)).to.be.equal(end);
+
+        const balance = await token.balanceOf(alice.address);
+        await sleep(DAY);
+
+        await ve.connect(alice).cancel();
+
+        const penaltyRate = PENALTY_BASE.mul(end - (await getBlockTimestamp())).div(end - start);
+        expect((await token.balanceOf(alice.address)).sub(balance)).to.be.equal(
+            amount.mul(PENALTY_BASE.sub(penaltyRate)).div(PENALTY_BASE)
+        );
     });
 
     it("should cancel()", async () => {

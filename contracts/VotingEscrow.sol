@@ -48,7 +48,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
     struct LockedBalance {
         int128 amount;
         int128 discount;
-        uint256 duration;
+        uint256 start;
         uint256 end;
     }
 
@@ -311,17 +311,17 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
 
         supply = supply_before + _value;
         LockedBalance memory old_locked;
-        (old_locked.amount, old_locked.discount, old_locked.duration, old_locked.end) = (
+        (old_locked.amount, old_locked.discount, old_locked.start, old_locked.end) = (
             _locked.amount,
             _locked.discount,
-            _locked.duration,
+            _locked.start,
             _locked.end
         );
         // Adding to existing lock, or if a lock is expired - creating a new one
         _locked.amount += (_value).toInt128();
         if (_discount != 0) _locked.discount += _discount.toInt128();
         if (unlock_time != 0) {
-            _locked.duration = unlock_time - block.timestamp;
+            if (_locked.start == 0) _locked.start = block.timestamp;
             _locked.end = unlock_time;
         }
         locked[_addr] = _locked;
@@ -498,7 +498,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
 
-        uint256 penaltyRate = _penaltyRate(_locked.duration, _locked.end);
+        uint256 penaltyRate = _penaltyRate(_locked.start, _locked.end);
         uint256 supply_before = _clear(_locked, penaltyRate);
 
         uint256 value = _locked.amount.toUint256();
@@ -510,8 +510,8 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         emit Supply(supply_before, supply_before - value);
     }
 
-    function _penaltyRate(uint256 duration, uint256 end) internal view returns (uint256 penalty) {
-        penalty = (1e18 * (end - block.timestamp)) / duration;
+    function _penaltyRate(uint256 start, uint256 end) internal view returns (uint256 penalty) {
+        penalty = (1e18 * (end - block.timestamp)) / (end - start);
         if (penalty < 1e18 / 2) penalty = 1e18 / 2;
     }
 
@@ -553,7 +553,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
             msg.sender,
             _locked.amount,
             _locked.discount,
-            _locked.duration,
+            _locked.start,
             _locked.end,
             delegates
         );

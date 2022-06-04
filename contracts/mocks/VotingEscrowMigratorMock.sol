@@ -14,7 +14,7 @@ contract VotingEscrowMigratorMock is IVotingEscrowMigrator {
     struct LockedBalance {
         int128 amount;
         int128 discount;
-        uint256 duration;
+        uint256 start;
         uint256 end;
     }
 
@@ -30,11 +30,11 @@ contract VotingEscrowMigratorMock is IVotingEscrowMigrator {
         address account,
         int128 amount,
         int128 discount,
-        uint256 duration,
+        uint256 start,
         uint256 end,
         address[] calldata _delegates
     ) external override {
-        locked[account] = LockedBalance(amount, discount, duration, end);
+        locked[account] = LockedBalance(amount, discount, start, end);
         delegates[account] = _delegates;
     }
 

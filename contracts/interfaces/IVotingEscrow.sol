@@ -45,7 +45,7 @@ interface IVotingEscrow {
         returns (
             int128 amount,
             int128 discount,
-            uint256 duration,
+            uint256 start,
             uint256 end
         );
 
