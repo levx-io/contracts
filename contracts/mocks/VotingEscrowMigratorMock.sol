@@ -20,6 +20,7 @@ contract VotingEscrowMigratorMock is IVotingEscrowMigrator {
 
     address public immutable token;
     mapping(address => LockedBalance) public locked;
+    mapping(address => address[]) public delegates;
 
     constructor(address ve) {
         token = IVotingEscrow(ve).token();
@@ -30,9 +31,11 @@ contract VotingEscrowMigratorMock is IVotingEscrowMigrator {
         int128 amount,
         int128 discount,
         uint256 duration,
-        uint256 end
+        uint256 end,
+        address[] calldata _delegates
     ) external override {
         locked[account] = LockedBalance(amount, discount, duration, end);
+        delegates[account] = _delegates;
     }
 
     function withdraw() external {

@@ -543,6 +543,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
 
+        address[] memory delegates = delegateAt[msg.sender];
         uint256 supply_before = _clear(_locked, 0);
 
         uint256 value = _locked.amount.toUint256();
@@ -553,7 +554,8 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
             _locked.amount,
             _locked.discount,
             _locked.duration,
-            _locked.end
+            _locked.end,
+            delegates
         );
         migrated[msg.sender] = true;
 
