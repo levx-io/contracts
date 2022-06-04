@@ -12,7 +12,7 @@ export default async ({ getNamedAccounts, deployments }) => {
 
     const { address } = await deploy("BoostedVotingEscrowDelegate", {
         from: deployer,
-        args: [ve.address, TOKEN, DISCOUNT_TOKEN, MIN_DURATION, MAX_BOOST, 1655510400],
+        args: [ve.address, TOKEN, DISCOUNT_TOKEN, MIN_DURATION, MAX_BOOST, 1655596800],
         log: true,
     });
     await execute("VotingEscrow", { from: deployer, log: true }, "setDelegate", address, true);
