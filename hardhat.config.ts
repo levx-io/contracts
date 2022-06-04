@@ -15,7 +15,7 @@ import { HardhatUserConfig, task } from "hardhat/config";
 
 import { removeConsoleLog } from "hardhat-preprocessor";
 
-const accounts = [process.env.PRIVATE_KEY];
+const accounts = [process.env.PRIVATE_KEY || "0000000000000000000000000000000000000000000000000000000000000000"];
 
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
