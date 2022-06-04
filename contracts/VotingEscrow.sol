@@ -52,10 +52,10 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         uint256 end;
     }
 
-    int128 internal constant DEPOSIT_FOR_TYPE = 0;
-    int128 internal constant CRETE_LOCK_TYPE = 1;
-    int128 internal constant INCREASE_LOCK_AMOUNT = 2;
-    int128 internal constant INCREASE_UNLOCK_TIME = 3;
+    int128 public constant DEPOSIT_FOR_TYPE = 0;
+    int128 public constant CRETE_LOCK_TYPE = 1;
+    int128 public constant INCREASE_LOCK_AMOUNT = 2;
+    int128 public constant INCREASE_UNLOCK_TIME = 3;
     uint256 internal constant MULTIPLIER = 1e18;
 
     uint256 public immutable override interval;
@@ -377,22 +377,22 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
     }
 
     /**
-     * @notice Deposit `_value` tokens with `_discount` for `_addr` and lock until `_unlock_time`
+     * @notice Deposit `_value` tokens with `_discount` for `_addr` and lock for `_duration`
      * @dev Only delegates can creat a lock for someone else
      * @param _addr User's wallet address
      * @param _value Amount to add to user's lock
      * @param _discount Amount to get discounted out of _value
-     * @param _unlock_time Epoch time when tokens unlock, rounded down to whole weeks
+     * @param _duration Epoch time until tokens unlock from now
      */
     function createLockFor(
         address _addr,
         uint256 _value,
         uint256 _discount,
-        uint256 _unlock_time
+        uint256 _duration
     ) external override nonReentrant onlyDelegate beforeMigrated(_addr) {
         _pushDelegate(_addr, msg.sender);
 
-        uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to a multiple of interval
+        uint256 unlock_time = ((block.timestamp + _duration) / interval) * interval; // Locktime is rounded down to a multiple of interval
         LockedBalance memory _locked = locked[_addr];
 
         require(_value > 0, "VE: INVALID_VALUE");
@@ -405,18 +405,18 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
     }
 
     /**
-     * @notice Deposit `_value` tokens for `msg.sender` and lock until `_unlock_time`
+     * @notice Deposit `_value` tokens for `msg.sender` and lock for `_duration`
      * @param _value Amount to deposit
-     * @param _unlock_time Epoch time when tokens unlock, rounded down to whole weeks
+     * @param _duration Epoch time until tokens unlock from now
      */
-    function createLock(uint256 _value, uint256 _unlock_time)
+    function createLock(uint256 _value, uint256 _duration)
         external
         override
         nonReentrant
         authorized
         beforeMigrated(msg.sender)
     {
-        uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to a multiple of interval
+        uint256 unlock_time = ((block.timestamp + _duration) / interval) * interval; // Locktime is rounded down to a multiple of interval
         LockedBalance memory _locked = locked[msg.sender];
 
         require(_value > 0, "VE: INVALID_VALUE");
@@ -467,10 +467,10 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
     }
 
     /**
-     * @notice Extend the unlock time for `msg.sender` to `_unlock_time`
-     * @param _unlock_time New epoch time for unlocking
+     * @notice Extend the unlock time for `msg.sender` to `_duration`
+     * @param _duration Increased epoch time for unlocking
      */
-    function increaseUnlockTime(uint256 _unlock_time)
+    function increaseUnlockTime(uint256 _duration)
         external
         override
         nonReentrant
@@ -478,12 +478,12 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow {
         beforeMigrated(msg.sender)
     {
         LockedBalance memory _locked = locked[msg.sender];
-        uint256 unlock_time = (_unlock_time / interval) * interval; // Locktime is rounded down to a multiple of interval
+        uint256 unlock_time = ((_locked.end + _duration) / interval) * interval; // Locktime is rounded down to a multiple of interval
 
         require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
         require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
         require(_locked.discount == 0, "VE: LOCK_DISCOUNTED");
-        require(unlock_time > _locked.end, "VE: UNLOCK_TIME_TOO_EARLY");
+        require(unlock_time >= _locked.end + interval, "VE: UNLOCK_TIME_TOO_EARLY");
         require(unlock_time <= block.timestamp + maxDuration, "VE: UNLOCK_TIME_TOO_LATE");
 
         _depositFor(msg.sender, 0, 0, unlock_time, _locked, INCREASE_UNLOCK_TIME);

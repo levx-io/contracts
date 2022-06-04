@@ -8,8 +8,8 @@ interface IVotingEscrow {
         address indexed provider,
         uint256 value,
         uint256 discount,
-        uint256 indexed locktime,
-        int128 _type,
+        uint256 indexed unlockTime,
+        int128 indexed _type,
         uint256 ts
     );
     event Cancel(address indexed provider, uint256 value, uint256 discount, uint256 penaltyRate, uint256 ts);
@@ -95,10 +95,10 @@ interface IVotingEscrow {
         address _addr,
         uint256 _value,
         uint256 _discount,
-        uint256 _unlock_time
+        uint256 _duration
     ) external;
 
-    function createLock(uint256 _value, uint256 _unlock_time) external;
+    function createLock(uint256 _value, uint256 _duration) external;
 
     function increaseAmountFor(
         address _addr,
@@ -108,7 +108,7 @@ interface IVotingEscrow {
 
     function increaseAmount(uint256 _value) external;
 
-    function increaseUnlockTime(uint256 _unlock_time) external;
+    function increaseUnlockTime(uint256 _duration) external;
 
     function cancel() external;
 

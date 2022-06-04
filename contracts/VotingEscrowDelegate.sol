@@ -50,13 +50,14 @@ abstract contract VotingEscrowDelegate is IVotingEscrowDelegate {
         require(duration <= _maxDuration, "VED: DURATION_TOO_LONG");
 
         uint256 unlockTime = ((block.timestamp + duration) / _interval) * _interval; // rounded down to a multiple of interval
-        (uint256 amountVE, uint256 amountToken) = _getAmounts(amount, unlockTime - block.timestamp);
+        uint256 _duration = unlockTime - block.timestamp;
+        (uint256 amountVE, uint256 amountToken) = _getAmounts(amount, _duration);
         if (discounted) {
             amountVE = (amountVE * 100) / 90;
         }
 
         emit CreateLock(msg.sender, amountVE, amountVE - amountToken, unlockTime);
-        IVotingEscrow(ve).createLockFor(msg.sender, amountVE, amountVE - amountToken, unlockTime);
+        IVotingEscrow(ve).createLockFor(msg.sender, amountVE, amountVE - amountToken, _duration);
     }
 
     function increaseAmountDiscounted(uint256 amount) external eligibleForDiscount {

@@ -88,7 +88,7 @@ const setupTest = async () => {
  *
  *  After the test is done, check all over again with balanceOfAt / totalSupplyAt
  **/
-describe.only("VotingEscrow", () => {
+describe("VotingEscrow", () => {
     beforeEach(async () => {
         await ethers.provider.send("hardhat_reset", []);
     });
@@ -116,7 +116,7 @@ describe.only("VotingEscrow", () => {
 
         stages["before_deposits"] = await getBlockInfo();
 
-        await ve.connect(alice).createLock(amount, (await getBlockTimestamp()) + INTERVAL);
+        await ve.connect(alice).createLock(amount, INTERVAL);
         stages["alice_deposit"] = await getBlockInfo();
 
         await sleep(H);
@@ -158,14 +158,14 @@ describe.only("VotingEscrow", () => {
         await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
         await mine();
 
-        await ve.connect(alice).createLock(amount, (await getBlockTimestamp()) + 2 * INTERVAL);
+        await ve.connect(alice).createLock(amount, 2 * INTERVAL);
         stages["alice_deposit_2"] = await getBlockInfo();
 
         expectApproxEqual(await totalSupply(), amount.div(MAXTIME).mul(2).mul(INTERVAL), TOL);
         expectApproxEqual(await balanceOf(alice), amount.div(MAXTIME).mul(2).mul(INTERVAL), TOL);
         expectZero(await balanceOf(bob));
 
-        await ve.connect(bob).createLock(amount, (await getBlockTimestamp()) + INTERVAL);
+        await ve.connect(bob).createLock(amount, INTERVAL);
         stages["bob_deposit_2"] = await getBlockInfo();
 
         expectApproxEqual(await totalSupply(), amount.div(MAXTIME).mul(3).mul(INTERVAL), TOL);
@@ -331,14 +331,18 @@ describe.only("VotingEscrow", () => {
         await mine();
 
         ts = await getBlockTimestamp();
-        await ve.connect(alice).createLock(amount, ts + INTERVAL);
+        await ve.connect(alice).createLock(amount, INTERVAL);
         let end = divf(ts + INTERVAL, INTERVAL) * INTERVAL;
         expect(await ve.unlockTime(alice.address)).to.be.equal(end);
 
         const start = await getBlockTimestamp();
         await sleep(H);
 
-        await ve.connect(alice).increaseUnlockTime(end + INTERVAL);
+        await expect(ve.connect(alice).increaseUnlockTime(INTERVAL - 1)).to.be.revertedWith(
+            "VE: UNLOCK_TIME_TOO_EARLY"
+        );
+
+        await ve.connect(alice).increaseUnlockTime(INTERVAL);
         end = divf(end + INTERVAL, INTERVAL) * INTERVAL;
         expect(await ve.unlockTime(alice.address)).to.be.equal(end);
 
@@ -368,7 +372,7 @@ describe.only("VotingEscrow", () => {
         await mine();
 
         let unlockTime = Math.floor(((await getBlockTimestamp()) + INTERVAL) / INTERVAL) * INTERVAL;
-        await ve.connect(alice).createLock(amount, unlockTime);
+        await ve.connect(alice).createLock(amount, INTERVAL);
 
         let balance = await token.balanceOf(alice.address);
         await sleep(DAY);
@@ -389,7 +393,7 @@ describe.only("VotingEscrow", () => {
         await mine();
 
         unlockTime = Math.floor(((await getBlockTimestamp()) + INTERVAL) / INTERVAL) * INTERVAL;
-        await ve.connect(alice).createLock(amount, unlockTime);
+        await ve.connect(alice).createLock(amount, INTERVAL);
 
         await sleep(DAY);
         await ve.connect(alice).increaseAmount(amount);
@@ -408,7 +412,7 @@ describe.only("VotingEscrow", () => {
         await mine();
 
         unlockTime = (await getBlockTimestamp()) + INTERVAL;
-        await ve.connect(alice).createLock(amount, unlockTime);
+        await ve.connect(alice).createLock(amount, INTERVAL);
 
         await sleep(INTERVAL);
         await expect(ve.connect(alice).cancel()).to.be.revertedWith("VE: LOCK_EXPIRED");
@@ -430,7 +434,7 @@ describe.only("VotingEscrow", () => {
         await mine();
 
         const unlockTime = (await getBlockTimestamp()) + INTERVAL;
-        await ve.connect(alice).createLock(amount, unlockTime);
+        await ve.connect(alice).createLock(amount, INTERVAL);
 
         await expect(ve.connect(alice).migrate()).to.be.revertedWith("VE: MIGRATOR_NOT_SET");
 
