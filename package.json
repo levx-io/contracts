@@ -21,8 +21,9 @@
     "typechain"
   ],
   "scripts": {
-    "build": "rimraf abis artifacts cache coverage typechain && hardhat compile",
+    "build": "hardhat compile",
     "console": "hardhat console",
+    "prepublishOnly": "rimraf abis artifacts cache coverage typechain && yarn build && yarn run hardhat export-abi",
     "mainnet:deploy": "hardhat --network mainnet deploy",
     "mainnet:verify": "hardhat --network mainnet etherscan-verify --solc-input --license UNLICENSED --force-license",
     "mainnet:export": "hardhat --network mainnet export",

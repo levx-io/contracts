@@ -30,7 +30,7 @@ task("accounts", "Prints the list of accounts", async (args, { ethers }) => {
 const config: HardhatUserConfig = {
     abiExporter: {
         path: "./abis",
-        runOnCompile: true,
+        runOnCompile: process.env.EXPORT_ABI === "true",
         clear: true,
         flat: true,
         spacing: 2,
