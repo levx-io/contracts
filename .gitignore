@@ -18,3 +18,4 @@ coverage.json
 
 .idea
 build/
+contracts/uniswapv2

@@ -43,9 +43,9 @@
     "moonbase:export": "hardhat --network moonbase export --export exports/moonbase.json",
     "arbitrum:deploy": "hardhat --network arbitrum deploy",
     "arbitrum:export": "hardhat --network arbitrum export --export exports/arbitrum.json",
-    "test": "cross-env TS_NODE_TRANSPILE_ONLY=1 hardhat test",
-    "test:coverage": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" hardhat coverage --testfiles \"test/*.test.ts\"",
-    "test:gas": "cross-env REPORT_GAS=true yarn test",
+    "test": "./scripts/test.sh",
+    "test:coverage": "./scripts/test:coverage.sh",
+    "test:gas": "./scripts/test:gas.sh",
     "test:brownie": "brownie test",
     "test:brownie:coverage": "brownie test --coverage",
     "test:brownie:gas": "brownie test --gas"
@@ -103,7 +103,8 @@
     "typescript": "^4.3.0"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^4.6.0"
+    "@openzeppelin/contracts": "^4.6.0",
+    "@sushiswap/core": "^1.4.2"
   },
   "version": "1.1.0"
 }
