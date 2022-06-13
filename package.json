@@ -46,10 +46,7 @@
     "arbitrum:export": "hardhat --network arbitrum export --export exports/arbitrum.json",
     "test": "./scripts/test.sh",
     "test:coverage": "./scripts/test:coverage.sh",
-    "test:gas": "./scripts/test:gas.sh",
-    "test:brownie": "brownie test",
-    "test:brownie:coverage": "brownie test --coverage",
-    "test:brownie:gas": "brownie test --gas"
+    "test:gas": "./scripts/test:gas.sh"
   },
   "lint-staged": {
     "*.ts": [
