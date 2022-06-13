@@ -11,6 +11,7 @@ chai.use(solidity);
 const DAY = 86400;
 const NUMBER_OF_DAYS = 3;
 const INTERVAL = NUMBER_OF_DAYS * DAY;
+const WEIGHT_VOTE_DELAY = 7 * DAY;
 const MAXTIME = Math.floor((2 * 365 * DAY) / INTERVAL) * INTERVAL;
 
 const randomAddress = () => utils.hexlify(utils.randomBytes(20));
@@ -28,12 +29,12 @@ const setupTest = async () => {
     const ve = (await VE.deploy(token.address, "veToken", "VE", INTERVAL, MAXTIME)) as VotingEscrow;
 
     const GC = await ethers.getContractFactory("GaugeController");
-    const gc = (await GC.deploy(token.address, ve.address)) as GaugeController;
+    const gc = (await GC.deploy(INTERVAL, WEIGHT_VOTE_DELAY, token.address, ve.address)) as GaugeController;
 
     // Set up gauges and types
-    await gc["add_type(string,uint256)"]("Liquidity", constants.WeiPerEther);
+    await gc["addType(string,uint256)"]("Liquidity", constants.WeiPerEther);
     for (const gauge of three_gauges) {
-        await gc["add_gauge(address,int128)"](gauge, 0);
+        await gc["addGauge(address,int128)"](gauge, 0);
     }
 
     // Distribute coins
@@ -100,13 +101,13 @@ describe("GaugeController", () => {
             ); // XXX what if votes are not used up to 100%?
             // Now votes are [[vote_gauge_0, vote_gauge_1, vote_gauge_2], ...]
             for (let x = 0; x < 3; x++) {
-                await gc.connect(accounts[i]).vote_for_gauge_weights(three_gauges[x], votes[votes.length - 1][x]);
+                await gc.connect(accounts[i]).voteForGaugeWeights(three_gauges[x], votes[votes.length - 1][x]);
             }
         }
 
         // Vote power assertions - everyone used all voting power
         for (let i = 0; i < 3; i++) {
-            expect(await gc.vote_user_power(accounts[i].address)).to.be.equal(10000);
+            expect(await gc.voteUserPower(accounts[i].address)).to.be.equal(10000);
         }
 
         // Calculate slope data, build model functions
@@ -143,11 +144,11 @@ describe("GaugeController", () => {
         let ts_last = await getBlockTimestamp();
         while (ts_last < timestamp + 1.5 * max_duration) {
             for (let i = 0; i < 3; i++) {
-                await gc.connect(accounts[4]).checkpoint_gauge(three_gauges[i]);
+                await gc.connect(accounts[4]).checkpointGauge(three_gauges[i]);
             }
 
             const relative_time = (divf(ts_last, INTERVAL) * INTERVAL - timestamp) / max_duration;
-            const weights = await Promise.all(array(3, i => gc["gauge_relative_weight(address)"](three_gauges[i])));
+            const weights = await Promise.all(array(3, i => gc["gaugeRelativeWeight(address)"](three_gauges[i])));
 
             let theoretical_weights: BigNumber[];
             if (relative_time < 1) {
