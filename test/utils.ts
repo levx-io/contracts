@@ -53,3 +53,27 @@ export const expectApproxEqual = (
 export const expectZero = (value: BigNumberish) => {
     expect(value).to.be.equal(0);
 };
+
+export const randomArray = (min: BigNumberish, max: BigNumberish, count: number) => {
+    const array: BigNumber[] = [];
+    const range = BigNumber.from(max).sub(min);
+    for (let i = 0; i < count; i++) {
+        const value = utils.parseEther(Math.random().toFixed(18)).mul(range).div(constants.WeiPerEther);
+        array.push(BigNumber.from(min).add(value));
+    }
+    return array;
+};
+
+export const randomMatrix = (min: BigNumberish, max: BigNumberish, row: number, col: number) => {
+    const matrix: BigNumber[][] = [];
+    const range = BigNumber.from(max).sub(min);
+    for (let i = 0; i < col; i++) {
+        const data: BigNumber[] = [];
+        for (let j = 0; j < row; j++) {
+            const value = utils.parseEther(Math.random().toFixed(18)).mul(range).div(constants.WeiPerEther);
+            data.push(BigNumber.from(min).add(value));
+        }
+        matrix.push(data);
+    }
+    return matrix;
+};
