@@ -29,7 +29,7 @@ const setupTest = async () => {
     const ve = (await VE.deploy(token.address, "veToken", "VE", INTERVAL, MAXTIME)) as VotingEscrow;
 
     const GC = await ethers.getContractFactory("GaugeController");
-    const gc = (await GC.deploy(INTERVAL, WEIGHT_VOTE_DELAY, token.address, ve.address)) as GaugeController;
+    const gc = (await GC.deploy(INTERVAL, WEIGHT_VOTE_DELAY, ve.address)) as GaugeController;
 
     // Set up gauges and types
     await gc["addType(string,uint256)"]("Liquidity", constants.WeiPerEther);

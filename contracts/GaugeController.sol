@@ -31,13 +31,12 @@ contract GaugeController is Ownable {
 
     uint256 public immutable interval;
     uint256 public immutable weightVoteDelay;
-    address public immutable token;
-    address public immutable veToken;
+    address public immutable votingEscrow;
 
     // Gauge parameters
     // All numbers are "fixed point" on the basis of 1e18
-    int128 public gaugeTypeLength;
-    int128 public gaugeLength;
+    int128 public gaugeTypesLength;
+    int128 public gaugesLength;
     mapping(int128 => string) public gaugeTypeNames;
 
     // Needed for enumeration
@@ -58,11 +57,11 @@ contract GaugeController is Ownable {
     // timestamps are rounded to whole weeks
 
     mapping(address => mapping(uint256 => Point)) public pointsWeight; // gauge_addr -> time -> Point
-    mapping(address => mapping(uint256 => uint256)) internal changesWeight; // gauge_addr -> time -> slope
-    mapping(address => uint256) internal timeWeight; // gauge_addr -> last scheduled time (next week public time_weight;
+    mapping(address => mapping(uint256 => uint256)) internal _changesWeight; // gauge_addr -> time -> slope
+    mapping(address => uint256) public timeWeight; // gauge_addr -> last scheduled time (next week public time_weight;
 
     mapping(int128 => mapping(uint256 => Point)) public pointsSum; // type_id -> time -> Point
-    mapping(int128 => mapping(uint256 => uint256)) internal changesSum; // type_id -> time -> slope
+    mapping(int128 => mapping(uint256 => uint256)) internal _changesSum; // type_id -> time -> slope
     mapping(int128 => uint256) public timeSum; // type_id -> last scheduled time (next week public time_sum;
 
     mapping(uint256 => uint256) public pointsTotal; // time -> total weight
@@ -81,14 +80,12 @@ contract GaugeController is Ownable {
      * @notice Contract constructor
      * @param _interval for how many seconds gauge weights will remain the same
      * @param _weightVoteDelay for how many seconds weight votes cannot be changed
-     * @param _token `ERC20CRV` contract address
-     * @param _veToken `VotingEscrow` contract address
+     * @param _votingEscrow `VotingEscrow` contract address
      */
-    constructor(uint256 _interval, uint256 _weightVoteDelay, address _token, address _veToken) {
+    constructor(uint256 _interval, uint256 _weightVoteDelay, address _votingEscrow) {
         interval = _interval;
         weightVoteDelay = _weightVoteDelay;
-        token = _token;
-        veToken = _veToken;
+        votingEscrow = _votingEscrow;
         timeTotal = (block.timestamp / interval) * interval;
     }
 
@@ -175,7 +172,7 @@ contract GaugeController is Ownable {
                 uint256 d_bias = pt.slope * interval;
                 if (pt.bias > d_bias) {
                     pt.bias -= d_bias;
-                    uint256 d_slope = changesSum[gauge_type][t];
+                    uint256 d_slope = _changesSum[gauge_type][t];
                     pt.slope -= d_slope;
                 } else {
                     pt.bias = 0;
@@ -195,7 +192,7 @@ contract GaugeController is Ownable {
      */
     function _getTotal() internal returns (uint256) {
         uint256 t = timeTotal;
-        int128 _n_gauge_types = gaugeTypeLength;
+        int128 _n_gauge_types = gaugeTypesLength;
         // If we have already checkpointed - still need to change the value
         if (t > block.timestamp) t -= interval;
         uint256 pt = pointsTotal[t];
@@ -240,7 +237,7 @@ contract GaugeController is Ownable {
                 uint256 d_bias = pt.slope * interval;
                 if (pt.bias > d_bias) {
                     pt.bias -= d_bias;
-                    uint256 d_slope = changesWeight[gauge_addr][t];
+                    uint256 d_slope = _changesWeight[gauge_addr][t];
                     pt.slope -= d_slope;
                 } else {
                     pt.bias = 0;
@@ -273,11 +270,11 @@ contract GaugeController is Ownable {
         int128 gauge_type,
         uint256 weight
     ) public onlyOwner {
-        require((gauge_type >= 0) && (gauge_type < gaugeTypeLength), "GC: INVALID_GAUGE_TYPE");
+        require((gauge_type >= 0) && (gauge_type < gaugeTypesLength), "GC: INVALID_GAUGE_TYPE");
         require(_gaugeTypes[addr] == 0, "GC: DUPLICATE_GAUGE");
 
-        int128 n = gaugeLength;
-        gaugeLength = n + 1;
+        int128 n = gaugesLength;
+        gaugesLength = n + 1;
         gauges[n] = addr;
 
         _gaugeTypes[addr] = gauge_type + 1;
@@ -420,9 +417,9 @@ contract GaugeController is Ownable {
      * @param weight Weight of gauge type
      */
     function addType(string memory _name, uint256 weight) public onlyOwner {
-        int128 type_id = gaugeTypeLength;
+        int128 type_id = gaugeTypesLength;
         gaugeTypeNames[type_id] = _name;
-        gaugeTypeLength = type_id + 1;
+        gaugeTypesLength = type_id + 1;
         if (weight != 0) {
             _changeTypeWeight(type_id, weight);
             emit AddType(_name, type_id);
@@ -477,7 +474,7 @@ contract GaugeController is Ownable {
      * @param _user_weight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
      */
     function voteForGaugeWeights(address _gauge_addr, uint256 _user_weight) external {
-        address escrow = veToken;
+        address escrow = votingEscrow;
         uint256 slope = uint256(uint128(IVotingEscrow(escrow).getLastUserSlope(msg.sender)));
         uint256 lock_end = IVotingEscrow(escrow).unlockTime(msg.sender);
         uint256 next_time = ((block.timestamp + interval) / interval) * interval;
@@ -540,12 +537,12 @@ contract GaugeController is Ownable {
         }
         if (old_slope.end > block.timestamp) {
             // Cancel old slope changes if they still didn't happen
-            changesWeight[_gauge_addr][old_slope.end] -= old_slope.slope;
-            changesSum[gauge_type][old_slope.end] -= old_slope.slope;
+            _changesWeight[_gauge_addr][old_slope.end] -= old_slope.slope;
+            _changesSum[gauge_type][old_slope.end] -= old_slope.slope;
         }
         // Add slope changes for new slopes
-        changesWeight[_gauge_addr][new_slope.end] += new_slope.slope;
-        changesSum[gauge_type][new_slope.end] += new_slope.slope;
+        _changesWeight[_gauge_addr][new_slope.end] += new_slope.slope;
+        _changesSum[gauge_type][new_slope.end] += new_slope.slope;
 
         _getTotal();
 
