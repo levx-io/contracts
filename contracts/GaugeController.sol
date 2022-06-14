@@ -2,6 +2,7 @@
 pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./interfaces/IGaugeController.sol";
 import "./interfaces/IVotingEscrow.sol";
 
 function max(uint256 a, uint256 b) pure returns (uint256) {
@@ -15,7 +16,7 @@ function max(uint256 a, uint256 b) pure returns (uint256) {
  * @notice Controls liquidity gauges and the issuance of coins through the gauges
  * @dev Ported from vyper (https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/GaugeController.vy)
  */
-contract GaugeController is Ownable {
+contract GaugeController is Ownable, IGaugeController {
     struct Point {
         uint256 bias;
         uint256 slope;
@@ -29,26 +30,26 @@ contract GaugeController is Ownable {
 
     uint256 internal constant MULTIPLIER = 10**18;
 
-    uint256 public immutable interval;
-    uint256 public immutable weightVoteDelay;
-    address public immutable votingEscrow;
+    uint256 public immutable override interval;
+    uint256 public immutable override weightVoteDelay;
+    address public immutable override votingEscrow;
 
     // Gauge parameters
     // All numbers are "fixed point" on the basis of 1e18
-    int128 public gaugeTypesLength;
-    int128 public gaugesLength;
-    mapping(int128 => string) public gaugeTypeNames;
+    int128 public override gaugeTypesLength;
+    int128 public override gaugesLength;
+    mapping(int128 => string) public override gaugeTypeNames;
 
     // Needed for enumeration
-    mapping(int128 => address) public gauges;
+    mapping(int128 => address) public override gauges;
 
     // we increment values by 1 prior to storing them here so we can rely on a value
     // of zero as meaning the gauge has not been set
     mapping(address => int128) internal _gaugeTypes;
 
-    mapping(address => mapping(address => VotedSlope)) public voteUserSlopes; // user -> gauge_addr -> VotedSlope
-    mapping(address => uint256) public voteUserPower; // Total vote power used by user
-    mapping(address => mapping(address => uint256)) public lastUserVote; // Last user vote's timestamp for each gauge address
+    mapping(address => mapping(address => VotedSlope)) public override voteUserSlopes; // user -> gauge_addr -> VotedSlope
+    mapping(address => uint256) public override voteUserPower; // Total vote power used by user
+    mapping(address => mapping(address => uint256)) public override lastUserVote; // Last user vote's timestamp for each gauge address
 
     // Past and scheduled points for gauge weight, sum of weights per type, total weight
     // Point is for bias+slope
@@ -56,25 +57,19 @@ contract GaugeController is Ownable {
     // time_* are for the last change timestamp
     // timestamps are rounded to whole weeks
 
-    mapping(address => mapping(uint256 => Point)) public pointsWeight; // gauge_addr -> time -> Point
+    mapping(address => mapping(uint256 => Point)) public override pointsWeight; // gauge_addr -> time -> Point
     mapping(address => mapping(uint256 => uint256)) internal _changesWeight; // gauge_addr -> time -> slope
-    mapping(address => uint256) public timeWeight; // gauge_addr -> last scheduled time (next week public time_weight;
+    mapping(address => uint256) public override timeWeight; // gauge_addr -> last scheduled time (next week)
 
-    mapping(int128 => mapping(uint256 => Point)) public pointsSum; // type_id -> time -> Point
+    mapping(int128 => mapping(uint256 => Point)) public override pointsSum; // type_id -> time -> Point
     mapping(int128 => mapping(uint256 => uint256)) internal _changesSum; // type_id -> time -> slope
-    mapping(int128 => uint256) public timeSum; // type_id -> last scheduled time (next week public time_sum;
+    mapping(int128 => uint256) public override timeSum; // type_id -> last scheduled time (next week)
 
-    mapping(uint256 => uint256) public pointsTotal; // time -> total weight
-    uint256 public timeTotal; // last scheduled time
+    mapping(uint256 => uint256) public override pointsTotal; // time -> total weight
+    uint256 public override timeTotal; // last scheduled time
 
-    mapping(int128 => mapping(uint256 => uint256)) public pointsTypeWeight; // type_id -> time -> type weight
-    mapping(int128 => uint256) public timeTypeWeight; // type_id -> last scheduled time (next week public time_type_weight;
-
-    event AddType(string name, int128 type_id);
-    event NewTypeWeight(int128 type_id, uint256 time, uint256 weight, uint256 total_weight);
-    event NewGaugeWeight(address gauge_address, uint256 time, uint256 weight, uint256 total_weight);
-    event VoteForGauge(uint256 time, address user, address gauge_addr, uint256 weight);
-    event NewGauge(address addr, int128 gauge_type, uint256 weight);
+    mapping(int128 => mapping(uint256 => uint256)) public override pointsTypeWeight; // type_id -> time -> type weight
+    mapping(int128 => uint256) public override timeTypeWeight; // type_id -> last scheduled time (next week)
 
     /**
      * @notice Contract constructor
@@ -82,7 +77,11 @@ contract GaugeController is Ownable {
      * @param _weightVoteDelay for how many seconds weight votes cannot be changed
      * @param _votingEscrow `VotingEscrow` contract address
      */
-    constructor(uint256 _interval, uint256 _weightVoteDelay, address _votingEscrow) {
+    constructor(
+        uint256 _interval,
+        uint256 _weightVoteDelay,
+        address _votingEscrow
+    ) {
         interval = _interval;
         weightVoteDelay = _weightVoteDelay;
         votingEscrow = _votingEscrow;
@@ -94,7 +93,7 @@ contract GaugeController is Ownable {
      * @param _addr Gauge address
      * @return Gauge type id
      */
-    function gaugeTypes(address _addr) external view returns (int128) {
+    function gaugeTypes(address _addr) external view override returns (int128) {
         int128 gauge_type = _gaugeTypes[_addr];
         require(gauge_type != 0, "GC: INVALID_GAUGE_TYPE");
 
@@ -106,7 +105,7 @@ contract GaugeController is Ownable {
      * @param addr Gauge address
      * @return Gauge weight
      */
-    function getGaugeWeight(address addr) external view returns (uint256) {
+    function getGaugeWeight(address addr) external view override returns (uint256) {
         return pointsWeight[addr][timeWeight[addr]].bias;
     }
 
@@ -115,7 +114,7 @@ contract GaugeController is Ownable {
      * @param type_id Type id
      * @return Type weight
      */
-    function getTypeWeight(int128 type_id) external view returns (uint256) {
+    function getTypeWeight(int128 type_id) external view override returns (uint256) {
         return pointsTypeWeight[type_id][timeTypeWeight[type_id]];
     }
 
@@ -123,7 +122,7 @@ contract GaugeController is Ownable {
      * @notice Get current total (type-weighted) weight
      * @return Total weight
      */
-    function getTotalWeight() external view returns (uint256) {
+    function getTotalWeight() external view override returns (uint256) {
         return pointsTotal[timeTotal];
     }
 
@@ -132,7 +131,7 @@ contract GaugeController is Ownable {
      * @param type_id Type id
      * @return Sum of gauge weights
      */
-    function getWeightsSumPerType(int128 type_id) external view returns (uint256) {
+    function getWeightsSumPerType(int128 type_id) external view override returns (uint256) {
         return pointsSum[type_id][timeSum[type_id]].bias;
     }
 
@@ -255,7 +254,7 @@ contract GaugeController is Ownable {
      * @param addr Gauge address
      * @param gauge_type Gauge type
      */
-    function addGauge(address addr, int128 gauge_type) external {
+    function addGauge(address addr, int128 gauge_type) external override {
         addGauge(addr, gauge_type, 0);
     }
 
@@ -269,7 +268,7 @@ contract GaugeController is Ownable {
         address addr,
         int128 gauge_type,
         uint256 weight
-    ) public onlyOwner {
+    ) public override onlyOwner {
         require((gauge_type >= 0) && (gauge_type < gaugeTypesLength), "GC: INVALID_GAUGE_TYPE");
         require(_gaugeTypes[addr] == 0, "GC: DUPLICATE_GAUGE");
 
@@ -302,7 +301,7 @@ contract GaugeController is Ownable {
     /**
      * @notice Checkpoint to fill data common for all gauges
      */
-    function checkpoint() external {
+    function checkpoint() external override {
         _getTotal();
     }
 
@@ -310,7 +309,7 @@ contract GaugeController is Ownable {
      * @notice Checkpoint to fill data for both a specific gauge and common for all gauges
      * @param addr Gauge address
      */
-    function checkpointGauge(address addr) external {
+    function checkpointGauge(address addr) external override {
         _getWeight(addr);
         _getTotal();
     }
@@ -342,7 +341,7 @@ contract GaugeController is Ownable {
      * @param addr Gauge address
      * @return Value of relative weight normalized to 1e18
      */
-    function gaugeRelativeWeight(address addr) external view returns (uint256) {
+    function gaugeRelativeWeight(address addr) external view override returns (uint256) {
         return _gaugeRelativeWeight(addr, block.timestamp);
     }
 
@@ -354,7 +353,7 @@ contract GaugeController is Ownable {
      * @param time Relative weight at the specified timestamp in the past or present
      * @return Value of relative weight normalized to 1e18
      */
-    function gaugeRelativeWeight(address addr, uint256 time) public view returns (uint256) {
+    function gaugeRelativeWeight(address addr, uint256 time) public view override returns (uint256) {
         return _gaugeRelativeWeight(addr, time);
     }
 
@@ -365,7 +364,7 @@ contract GaugeController is Ownable {
      * @param addr Gauge address
      * @return Value of relative weight normalized to 1e18
      */
-    function gaugeRelativeWeightWrite(address addr) external returns (uint256) {
+    function gaugeRelativeWeightWrite(address addr) external override returns (uint256) {
         return gaugeRelativeWeightWrite(addr, block.timestamp);
     }
 
@@ -377,7 +376,7 @@ contract GaugeController is Ownable {
      * @param time Relative weight at the specified timestamp in the past or present
      * @return Value of relative weight normalized to 1e18
      */
-    function gaugeRelativeWeightWrite(address addr, uint256 time) public returns (uint256) {
+    function gaugeRelativeWeightWrite(address addr, uint256 time) public override returns (uint256) {
         _getWeight(addr);
         _getTotal(); // Also calculates get_sum
         return gaugeRelativeWeight(addr, time);
@@ -407,7 +406,7 @@ contract GaugeController is Ownable {
      * @notice Add gauge type with name `_name` and weight `weight`
      * @param _name Name of gauge type
      */
-    function addType(string memory _name) external {
+    function addType(string memory _name) external override {
         addType(_name, 0);
     }
 
@@ -431,7 +430,7 @@ contract GaugeController is Ownable {
      * @param type_id Gauge type id
      * @param weight New Gauge weight
      */
-    function changeTypeWeight(int128 type_id, uint256 weight) external onlyOwner {
+    function changeTypeWeight(int128 type_id, uint256 weight) external override onlyOwner {
         _changeTypeWeight(type_id, weight);
     }
 
@@ -464,7 +463,7 @@ contract GaugeController is Ownable {
      * @param addr `GaugeController` contract address
      * @param weight New Gauge weight
      */
-    function changeGaugeWeight(address addr, uint256 weight) external onlyOwner {
+    function changeGaugeWeight(address addr, uint256 weight) external override onlyOwner {
         _changeGaugeWeight(addr, weight);
     }
 
@@ -473,7 +472,7 @@ contract GaugeController is Ownable {
      * @param _gauge_addr Gauge which `msg.sender` votes for
      * @param _user_weight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
      */
-    function voteForGaugeWeights(address _gauge_addr, uint256 _user_weight) external {
+    function voteForGaugeWeights(address _gauge_addr, uint256 _user_weight) external override {
         address escrow = votingEscrow;
         uint256 slope = uint256(uint128(IVotingEscrow(escrow).getLastUserSlope(msg.sender)));
         uint256 lock_end = IVotingEscrow(escrow).unlockTime(msg.sender);
