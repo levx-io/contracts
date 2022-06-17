@@ -61,6 +61,16 @@ interface IGaugeController {
 
     function getWeightsSumPerType(int128 gaugeType) external view returns (uint256);
 
+    function gaugeRelativeWeight(address addr) external view returns (uint256);
+
+    function gaugeRelativeWeight(address addr, uint256 time) external view returns (uint256);
+
+    function addType(string memory _name) external;
+
+    function addType(string memory _name, uint256 weight) external;
+
+    function changeTypeWeight(int128 gaugeType, uint256 weight) external;
+
     function addGauge(address addr, int128 gaugeType) external;
 
     function addGauge(
@@ -69,25 +79,15 @@ interface IGaugeController {
         uint256 weight
     ) external;
 
+    function changeGaugeWeight(address addr, uint256 weight) external;
+
     function checkpoint() external;
 
     function checkpointGauge(address addr) external;
 
-    function gaugeRelativeWeight(address addr) external view returns (uint256);
-
-    function gaugeRelativeWeight(address addr, uint256 time) external view returns (uint256);
-
     function gaugeRelativeWeightWrite(address addr) external returns (uint256);
 
     function gaugeRelativeWeightWrite(address addr, uint256 time) external returns (uint256);
-
-    function addType(string memory _name) external;
-
-    function addType(string memory _name, uint256 weight) external;
-
-    function changeTypeWeight(int128 gaugeType, uint256 weight) external;
-
-    function changeGaugeWeight(address addr, uint256 weight) external;
 
     function voteForGaugeWeights(address _gauge_addr, uint256 _user_weight) external;
 }
