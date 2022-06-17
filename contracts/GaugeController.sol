@@ -34,6 +34,8 @@ contract GaugeController is Ownable, IGaugeController {
     uint256 public immutable override weightVoteDelay;
     address public immutable override votingEscrow;
 
+    mapping(int128 => address) public override typeProxies;
+
     // Gauge parameters
     // All numbers are "fixed point" on the basis of 1e18
     int128 public override gaugeTypesLength;
@@ -161,24 +163,29 @@ contract GaugeController is Ownable, IGaugeController {
     /**
      * @notice Add gauge type with name `_name` and weight `weight`
      * @param _name Name of gauge type
+     * @param proxy Proxy of gauge type
      */
-    function addType(string memory _name) external override {
-        addType(_name, 0);
+    function addType(string memory _name, address proxy) external override {
+        addType(_name, proxy, 0);
     }
 
     /**
      * @notice Add gauge type with name `_name` and weight `weight`
      * @param _name Name of gauge type
+     * @param proxy Proxy of gauge type
      * @param weight Weight of gauge type
      */
-    function addType(string memory _name, uint256 weight) public onlyOwner {
+    function addType(string memory _name, address proxy, uint256 weight) public onlyOwner {
+        require(proxy != address(0), "GC: INVALID_PROXY");
+
         int128 gaugeType = gaugeTypesLength;
         gaugeTypeNames[gaugeType] = _name;
         gaugeTypesLength = gaugeType + 1;
+        setTypeProxy(gaugeType, proxy);
         if (weight != 0) {
             _changeTypeWeight(gaugeType, weight);
-            emit AddType(_name, gaugeType);
         }
+        emit AddType(_name, proxy, gaugeType);
     }
 
     /**
@@ -188,6 +195,13 @@ contract GaugeController is Ownable, IGaugeController {
      */
     function changeTypeWeight(int128 gaugeType, uint256 weight) external override onlyOwner {
         _changeTypeWeight(gaugeType, weight);
+    }
+
+    function setTypeProxy(int128 gaugeType, address proxy) public override onlyOwner {
+        require(proxy != address(0), "GC: INVALID_PROXY");
+
+        typeProxies[gaugeType] = proxy;
+        emit SetTypeProxy(gaugeType, proxy);
     }
 
     /**
@@ -209,7 +223,8 @@ contract GaugeController is Ownable, IGaugeController {
         address addr,
         int128 gaugeType,
         uint256 weight
-    ) public override onlyOwner {
+    ) public override {
+        require(msg.sender == typeProxies[gaugeType], "GC: FORBIDDEN");
         require((gaugeType >= 0) && (gaugeType < gaugeTypesLength), "GC: INVALID_GAUGE_TYPE");
         require(_gaugeTypes[addr] == 0, "GC: DUPLICATE_GAUGE");
 
@@ -244,8 +259,30 @@ contract GaugeController is Ownable, IGaugeController {
      * @param addr `GaugeController` contract address
      * @param weight New Gauge weight
      */
-    function changeGaugeWeight(address addr, uint256 weight) external override onlyOwner {
-        _changeGaugeWeight(addr, weight);
+    function changeGaugeWeight(address addr, uint256 weight) external override {
+        // Change gauge weight
+        // Only needed when testing in reality
+        int128 gaugeType = _gaugeTypes[addr] - 1;
+        require(msg.sender == typeProxies[gaugeType], "GC: FORBIDDEN");
+
+        uint256 old_gauge_weight = _getWeight(addr);
+        uint256 type_weight = _getTypeWeight(gaugeType);
+        uint256 old_sum = _getSum(gaugeType);
+        uint256 _total_weight = _getTotal();
+        uint256 next_time = ((block.timestamp + interval) / interval) * interval;
+
+        pointsWeight[addr][next_time].bias = weight;
+        timeWeight[addr] = next_time;
+
+        uint256 new_sum = old_sum + weight - old_gauge_weight;
+        pointsSum[gaugeType][next_time].bias = new_sum;
+        timeSum[gaugeType] = next_time;
+
+        _total_weight = _total_weight + new_sum * type_weight - old_sum * type_weight;
+        pointsTotal[next_time] = _total_weight;
+        timeTotal = next_time;
+
+        emit NewGaugeWeight(addr, block.timestamp, weight, _total_weight);
     }
 
     /**
@@ -304,6 +341,7 @@ contract GaugeController is Ownable, IGaugeController {
         require(block.timestamp >= lastUserVote[msg.sender][_gaugeAddr] + weightVoteDelay, "GC: VOTED_TOO_EARLY");
 
         int128 gaugeType = _gaugeTypes[_gaugeAddr] - 1;
+        require(msg.sender == typeProxies[gaugeType], "GC: FORBIDDEN");
         require(gaugeType >= 0, "GC: GAUGE_NOT_ADDED");
         // Prepare slopes and biases in memory
         VotedSlope memory old_slope = voteUserSlopes[msg.sender][_gaugeAddr];
@@ -370,30 +408,6 @@ contract GaugeController is Ownable, IGaugeController {
         timeTypeWeight[gaugeType] = next_time;
 
         emit NewTypeWeight(gaugeType, next_time, weight, _total_weight);
-    }
-
-    function _changeGaugeWeight(address addr, uint256 weight) internal {
-        // Change gauge weight
-        // Only needed when testing in reality
-        int128 gaugeType = _gaugeTypes[addr] - 1;
-        uint256 old_gauge_weight = _getWeight(addr);
-        uint256 type_weight = _getTypeWeight(gaugeType);
-        uint256 old_sum = _getSum(gaugeType);
-        uint256 _total_weight = _getTotal();
-        uint256 next_time = ((block.timestamp + interval) / interval) * interval;
-
-        pointsWeight[addr][next_time].bias = weight;
-        timeWeight[addr] = next_time;
-
-        uint256 new_sum = old_sum + weight - old_gauge_weight;
-        pointsSum[gaugeType][next_time].bias = new_sum;
-        timeSum[gaugeType] = next_time;
-
-        _total_weight = _total_weight + new_sum * type_weight - old_sum * type_weight;
-        pointsTotal[next_time] = _total_weight;
-        timeTotal = next_time;
-
-        emit NewGaugeWeight(addr, block.timestamp, weight, _total_weight);
     }
 
     function _updateSlopeChanges(

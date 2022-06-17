@@ -2,8 +2,9 @@
 pragma solidity ^0.8.0;
 
 interface IGaugeController {
-    event AddType(string name, int128 gaugeType);
+    event AddType(string name, address proxy, int128 gaugeType);
     event NewTypeWeight(int128 gaugeType, uint256 time, uint256 weight, uint256 total_weight);
+    event SetTypeProxy(int128 indexed gaugeType, address proxy);
     event NewGaugeWeight(address gauge_address, uint256 time, uint256 weight, uint256 total_weight);
     event VoteForGauge(uint256 time, address user, address gauge_addr, uint256 weight);
     event NewGauge(address addr, int128 gaugeType, uint256 weight);
@@ -13,6 +14,8 @@ interface IGaugeController {
     function weightVoteDelay() external view returns (uint256);
 
     function votingEscrow() external view returns (address);
+
+    function typeProxies(int128 gaugeType) external view returns (address);
 
     function gaugeTypesLength() external view returns (int128);
 
@@ -65,11 +68,13 @@ interface IGaugeController {
 
     function gaugeRelativeWeight(address addr, uint256 time) external view returns (uint256);
 
-    function addType(string memory _name) external;
+    function addType(string memory _name, address proxy) external;
 
-    function addType(string memory _name, uint256 weight) external;
+    function addType(string memory _name, address proxy, uint256 weight) external;
 
     function changeTypeWeight(int128 gaugeType, uint256 weight) external;
+
+    function setTypeProxy(int128 gaugeType, address proxy) external;
 
     function addGauge(address addr, int128 gaugeType) external;
 
