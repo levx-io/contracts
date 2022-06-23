@@ -25,7 +25,7 @@ contract NFTGaugeProxy is CloneFactory, Ownable, IGaugeProxy {
 
     function createGauge(address addr) external override onlyOwner returns (address gauge) {
         gauge = _createClone(_target);
-        IGauge(gauge).initialize(addr);
+        NFTGauge(gauge).initialize(addr);
 
         require(addrs[gauge] == address(0), "GP: GAUGE_CREATED");
         addrs[gauge] = addr;
