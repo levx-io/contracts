@@ -3,10 +3,10 @@ pragma solidity ^0.8.14;
 
 import "./interfaces/IGaugeProxy.sol";
 import "./base/BaseGaugeController.sol";
-import "./base/BaseNFT721.sol";
+import "./base/BaseNFTs.sol";
 import "./libraries/Base64.sol";
 
-contract NFTGauge is BaseGaugeController, BaseNFT721 {
+contract NFTGauge is BaseGaugeController, BaseNFTs {
     using Address for address;
     using Strings for uint256;
 
@@ -43,7 +43,7 @@ contract NFTGauge is BaseGaugeController, BaseNFT721 {
         } catch {
             symbol = "WNFT";
         }
-        __BaseNFT721_init(string(abi.encodePacked("Wrapped ", _name)), symbol);
+        __BaseNFTs_init(string(abi.encodePacked("Wrapped ", _name)), symbol);
 
         _addType("NFTs", 10**18);
     }

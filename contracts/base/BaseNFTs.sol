@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import "../base/ERC721Initializable.sol";
 import "../libraries/Signature.sol";
 
-abstract contract BaseNFT721 is ERC721Initializable {
+abstract contract BaseNFTs is ERC721Initializable {
     // keccak256("Permit(address spender,uint256 tokenId,uint256 nonce,uint256 deadline)");
     bytes32 public constant PERMIT_TYPEHASH = 0x49ecf333e5b8c95c40fdafc95c1ad136e8914a8fb55e9dc8bb01eaa83a2df9ad;
     // keccak256("Permit(address owner,address spender,uint256 nonce,uint256 deadline)");
@@ -18,7 +18,7 @@ abstract contract BaseNFT721 is ERC721Initializable {
     mapping(uint256 => uint256) public nonces;
     mapping(address => uint256) public noncesForAll;
 
-    function __BaseNFT721_init(string memory _name, string memory _symbol) internal initializer {
+    function __BaseNFTs_init(string memory _name, string memory _symbol) internal initializer {
         __ERC721_init(_name, _symbol);
 
         _CACHED_CHAIN_ID = block.chainid;
