@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: WTFPL
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
@@ -16,7 +16,7 @@ function max(uint256 a, uint256 b) pure returns (uint256) {
  * @notice Controls liquidity gauges and the issuance of coins through the gauges
  * @dev Ported from vyper (https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/GaugeController.vy)
  */
-contract BaseGaugeController is Initializable, IBaseGaugeController {
+abstract contract BaseGaugeController is Initializable, IBaseGaugeController {
     struct Point {
         uint256 bias;
         uint256 slope;
@@ -77,11 +77,11 @@ contract BaseGaugeController is Initializable, IBaseGaugeController {
      * @param _weightVoteDelay for how many seconds weight votes cannot be changed
      * @param _votingEscrow `VotingEscrow` contract address
      */
-    function initialize(
+    function __BaseGaugeController_init(
         uint256 _interval,
         uint256 _weightVoteDelay,
         address _votingEscrow
-    ) public override initializer {
+    ) internal initializer {
         interval = _interval;
         weightVoteDelay = _weightVoteDelay;
         votingEscrow = _votingEscrow;

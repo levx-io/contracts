@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: WTFPL
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
 import "./IBaseGaugeController.sol";
@@ -6,6 +6,12 @@ import "./IBaseGaugeController.sol";
 interface IGaugeController is IBaseGaugeController {
     event AddProxy(address indexed proxy, int128 indexed gaugeType);
     event RemoveProxy(address indexed proxy, int128 indexed gaugeType);
+
+    function initialize(
+        uint256 interval,
+        uint256 weightVoteDelay,
+        address votingEscrow
+    ) external;
 
     function proxies(address gauge) external view returns (int128 gaugeType);
 

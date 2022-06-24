@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.14;
 
 // Reference: https://github.com/optionality/clone-factory/blob/master/contracts/CloneFactory.sol

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: WTFPL
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
 interface IBaseGaugeController {
@@ -7,12 +7,6 @@ interface IBaseGaugeController {
     event NewGaugeWeight(bytes32 id, uint256 time, uint256 weight, uint256 totalWeight);
     event VoteForGauge(uint256 time, address user, bytes32 id, uint256 weight);
     event NewGauge(bytes32 id, int128 gaugeType, uint256 weight);
-
-    function initialize(
-        uint256 interval,
-        uint256 weightVoteDelay,
-        address votingEscrow
-    ) external;
 
     function interval() external view returns (uint256);
 

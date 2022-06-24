@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: WTFPL
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -11,6 +11,20 @@ contract GaugeController is Ownable, BaseGaugeController, IGaugeController {
     modifier onlyProxy(int128 gaugeType) {
         require(proxies[msg.sender] == gaugeType, "GC: FORBIDDEN");
         _;
+    }
+
+    /**
+     * @notice Contract initializer
+     * @param _interval for how many seconds gauge weights will remain the same
+     * @param _weightVoteDelay for how many seconds weight votes cannot be changed
+     * @param _votingEscrow `VotingEscrow` contract address
+     */
+    function initialize(
+        uint256 _interval,
+        uint256 _weightVoteDelay,
+        address _votingEscrow
+    ) public override initializer {
+        __BaseGaugeController_init(_interval, _weightVoteDelay, _votingEscrow);
     }
 
     function addProxy(address proxy, int128 gaugeType) external override {

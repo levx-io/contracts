@@ -1,12 +1,12 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.14;
 
 import "./interfaces/IGaugeProxy.sol";
 import "./base/BaseGaugeController.sol";
-import "./base/BaseERC721.sol";
+import "./base/BaseNFT721.sol";
 import "./libraries/Base64.sol";
 
-contract NFTGauge is BaseGaugeController, BaseERC721 {
+contract NFTGauge is BaseGaugeController, BaseNFT721 {
     using Address for address;
     using Strings for uint256;
 
@@ -26,6 +26,12 @@ contract NFTGauge is BaseGaugeController, BaseERC721 {
         nftContract = _nftContract;
         color = _toColor(nftContract);
 
+        __BaseGaugeController_init(
+            IBaseGaugeController(controller).interval(),
+            IBaseGaugeController(controller).weightVoteDelay(),
+            IBaseGaugeController(controller).votingEscrow()
+        );
+
         string memory symbol;
         try IERC721Metadata(_nftContract).name() returns (string memory name) {
             _name = name;
@@ -37,7 +43,7 @@ contract NFTGauge is BaseGaugeController, BaseERC721 {
         } catch {
             symbol = "WNFT";
         }
-        __ERC721_init(string(abi.encodePacked("Wrapped ", _name)), symbol);
+        __BaseNFT721_init(string(abi.encodePacked("Wrapped ", _name)), symbol);
 
         _addType("NFTs", 10**18);
     }

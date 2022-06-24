@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 
 pragma solidity ^0.8.14;
 
@@ -15,7 +15,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
  * the Metadata extension, but not including the Enumerable extension, which is available separately as
  * {ERC721Enumerable}.
  */
-contract BaseERC721 is Initializable, ERC165, IERC721, IERC721Metadata {
+abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721Metadata {
     using Address for address;
     using Strings for uint256;
 
@@ -113,7 +113,7 @@ contract BaseERC721 is Initializable, ERC165, IERC721, IERC721Metadata {
      * @dev See {IERC721-approve}.
      */
     function approve(address to, uint256 tokenId) public virtual override {
-        address owner = BaseERC721.ownerOf(tokenId);
+        address owner = ERC721Initializable.ownerOf(tokenId);
         require(to != owner, "SHOYU: INVALID_TO");
 
         require(msg.sender == owner || isApprovedForAll(owner, msg.sender), "SHOYU: FORBIDDEN");
@@ -231,7 +231,7 @@ contract BaseERC721 is Initializable, ERC165, IERC721, IERC721Metadata {
      */
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view virtual returns (bool) {
         require(_exists(tokenId), "SHOYU: INVALID_TOKEN_ID");
-        address owner = BaseERC721.ownerOf(tokenId);
+        address owner = ERC721Initializable.ownerOf(tokenId);
         return (spender == owner || getApproved(tokenId) == spender || isApprovedForAll(owner, spender));
     }
 
@@ -247,7 +247,7 @@ contract BaseERC721 is Initializable, ERC165, IERC721, IERC721Metadata {
     }
 
     function _parked(uint256 tokenId) internal view virtual returns (bool) {
-        address owner = BaseERC721.ownerOf(tokenId);
+        address owner = ERC721Initializable.ownerOf(tokenId);
         return owner == address(0) && tokenId < _toTokenIdParked;
     }
 
@@ -320,7 +320,7 @@ contract BaseERC721 is Initializable, ERC165, IERC721, IERC721Metadata {
      * Emits a {Transfer} event.
      */
     function _burn(uint256 tokenId) internal virtual {
-        address owner = BaseERC721.ownerOf(tokenId);
+        address owner = ERC721Initializable.ownerOf(tokenId);
         require(owner != address(0), "SHOYU: INVALID_TOKEN_ID");
 
         _beforeTokenTransfer(owner, address(0), tokenId);
@@ -350,7 +350,7 @@ contract BaseERC721 is Initializable, ERC165, IERC721, IERC721Metadata {
         address to,
         uint256 tokenId
     ) internal virtual {
-        require(BaseERC721.ownerOf(tokenId) == from, "SHOYU: TRANSFER_FORBIDDEN");
+        require(ERC721Initializable.ownerOf(tokenId) == from, "SHOYU: TRANSFER_FORBIDDEN");
         require(to != address(0), "SHOYU: INVALID_RECIPIENT");
 
         _beforeTokenTransfer(from, to, tokenId);
@@ -372,7 +372,7 @@ contract BaseERC721 is Initializable, ERC165, IERC721, IERC721Metadata {
      */
     function _approve(address to, uint256 tokenId) internal virtual {
         _tokenApprovals[tokenId] = to;
-        emit Approval(BaseERC721.ownerOf(tokenId), to, tokenId);
+        emit Approval(ERC721Initializable.ownerOf(tokenId), to, tokenId);
     }
 
     /**
