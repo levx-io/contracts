@@ -10,22 +10,28 @@ import "./interfaces/IGaugeController.sol";
 contract NFTGaugeProxy is CloneFactory, Ownable, IGaugeProxy {
     address public immutable override controller;
     int128 public immutable override gaugeType;
+    address public immutable tokenURIRenderer;
     address internal immutable _target;
 
     mapping(address => address) public override addrs;
 
-    constructor(address _controller, int128 _gaugeType) {
+    constructor(
+        address _controller,
+        int128 _gaugeType,
+        address _tokenURIRenderer
+    ) {
         controller = _controller;
         gaugeType = _gaugeType;
+        tokenURIRenderer = _tokenURIRenderer;
 
         NFTGauge gauge = new NFTGauge();
-        gauge.initialize(address(0));
+        gauge.initialize(address(0), address(0));
         _target = address(gauge);
     }
 
     function createGauge(address addr) external override onlyOwner returns (address gauge) {
         gauge = _createClone(_target);
-        NFTGauge(gauge).initialize(addr);
+        NFTGauge(gauge).initialize(addr, tokenURIRenderer);
 
         require(addrs[gauge] == address(0), "GP: GAUGE_CREATED");
         addrs[gauge] = addr;

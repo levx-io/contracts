@@ -11,11 +11,11 @@ contract NFTGauge is BaseGaugeController, WrappedERC721 {
 
     mapping(uint256 => bool) public withdrawn;
 
-    function initialize(address _nftContract) external initializer {
+    function initialize(address _nftContract, address _tokenURIRenderer) external initializer {
         proxy = msg.sender;
         controller = IGaugeProxy(msg.sender).controller();
 
-        __WrappedERC721_init(_nftContract);
+        __WrappedERC721_init(_nftContract, _tokenURIRenderer);
         __BaseGaugeController_init(
             IBaseGaugeController(controller).interval(),
             IBaseGaugeController(controller).weightVoteDelay(),
