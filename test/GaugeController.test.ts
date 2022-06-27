@@ -17,7 +17,6 @@ const MAXTIME = Math.floor((2 * 365 * DAY) / INTERVAL) * INTERVAL;
 const randomAddress = () => utils.hexlify(utils.randomBytes(20));
 const array = <T>(size, callback: (index) => T) => new Array(size).fill(0).map((_, index) => callback(index));
 const sum = (array: BigNumber[]) => array.reduce((prev, current) => prev.add(current), constants.Zero);
-const toBytes32 = (address: string) => "0x000000000000000000000000" + address.substr(2);
 
 const setupTest = async () => {
     const accounts = await ethers.getSigners();
@@ -30,13 +29,12 @@ const setupTest = async () => {
     const ve = (await VE.deploy(token.address, "veToken", "VE", INTERVAL, MAXTIME)) as VotingEscrow;
 
     const GC = await ethers.getContractFactory("GaugeController");
-    const gc = (await GC.deploy()) as GaugeController;
-    await gc.initialize(INTERVAL, WEIGHT_VOTE_DELAY, ve.address);
+    const gc = (await GC.deploy(INTERVAL, WEIGHT_VOTE_DELAY, ve.address)) as GaugeController;
 
     // Set up gauges and types
     await gc["addType(string,uint256)"]("Liquidity", constants.WeiPerEther);
     for (const gauge of three_gauges) {
-        await gc["addGauge(bytes32,int128)"](toBytes32(gauge), 0);
+        await gc["addGauge(address,int128)"](gauge, 0);
     }
 
     // Distribute coins
@@ -73,7 +71,7 @@ const setupTest = async () => {
  * st_votes : [(int, int), (int, int), (int, int)]
  * (vote for gauge 0, vote for gauge 1) for each account, in units of 10%
  **/
-describe("GaugeController", () => {
+describe.only("GaugeController", () => {
     beforeEach(async () => {
         await ethers.provider.send("hardhat_reset", []);
     });
@@ -103,8 +101,8 @@ describe("GaugeController", () => {
             ); // XXX what if votes are not used up to 100%?
             // Now votes are [[vote_gauge_0, vote_gauge_1, vote_gauge_2], ...]
             for (let x = 0; x < 3; x++) {
-                const id = toBytes32(three_gauges[x]);
-                await gc.connect(accounts[i])["voteForGaugeWeights(bytes32,uint256)"](id, votes[votes.length - 1][x]);
+                const id = three_gauges[x];
+                await gc.connect(accounts[i])["voteForGaugeWeights(address,uint256)"](id, votes[votes.length - 1][x]);
             }
         }
 
@@ -147,14 +145,12 @@ describe("GaugeController", () => {
         let ts_last = await getBlockTimestamp();
         while (ts_last < timestamp + 1.5 * max_duration) {
             for (let i = 0; i < 3; i++) {
-                const id = toBytes32(three_gauges[i]);
+                const id = three_gauges[i];
                 await gc.connect(accounts[4]).checkpointGauge(id);
             }
 
             const relative_time = (divf(ts_last, INTERVAL) * INTERVAL - timestamp) / max_duration;
-            const weights = await Promise.all(
-                array(3, i => gc["gaugeRelativeWeight(bytes32)"](toBytes32(three_gauges[i])))
-            );
+            const weights = await Promise.all(array(3, i => gc["gaugeRelativeWeight(address)"](three_gauges[i])));
 
             let theoretical_weights: BigNumber[];
             if (relative_time < 1) {

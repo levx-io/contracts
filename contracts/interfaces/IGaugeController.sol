@@ -1,45 +1,77 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import "./IBaseGaugeController.sol";
+interface IGaugeController {
+    event AddType(string name, int128 gaugeType);
+    event NewTypeWeight(int128 gaugeType, uint256 time, uint256 weight, uint256 totalWeight);
+    event NewGaugeWeight(address addr, uint256 time, uint256 weight, uint256 totalWeight);
+    event VoteForGauge(uint256 time, address user, address addr, uint256 weight);
+    event NewGauge(address addr, int128 gaugeType, uint256 weight);
 
-interface IGaugeController is IBaseGaugeController {
-    event AddProxy(address indexed proxy, int128 indexed gaugeType);
-    event RemoveProxy(address indexed proxy, int128 indexed gaugeType);
+    function interval() external view returns (uint256);
 
-    function initialize(
-        uint256 interval,
-        uint256 weightVoteDelay,
-        address votingEscrow
-    ) external;
+    function weightVoteDelay() external view returns (uint256);
 
-    function proxies(address gauge) external view returns (int128 gaugeType);
+    function votingEscrow() external view returns (address);
 
-    function addType(string memory name) external;
+    function gaugeTypesLength() external view returns (int128);
 
-    function addType(string memory name, uint256 weight) external;
+    function gaugesLength() external view returns (int128);
 
-    function changeTypeWeight(int128 gaugeType, uint256 weight) external;
+    function gaugeTypeNames(int128 gaugeType) external view returns (string memory);
 
-    function addGauge(bytes32 id, int128 gaugeType) external;
+    function gauges(int128 gaugeType) external view returns (address);
 
-    function addGauge(
-        bytes32 id,
-        int128 gaugeType,
-        uint256 weight
-    ) external;
+    function voteUserSlopes(address user, address addr)
+        external
+        view
+        returns (
+            uint256 slope,
+            uint256 power,
+            uint256 end
+        );
 
-    function changeGaugeWeight(bytes32 id, uint256 weight) external;
+    function voteUserPower(address user) external view returns (uint256 totalVotePower);
 
-    function addProxy(address proxy, int128 gaugeType) external;
+    function lastUserVote(address user, address addr) external view returns (uint256 time);
 
-    function removeProxy(address proxy) external;
+    function pointsWeight(address addr, uint256 time) external view returns (uint256 bias, uint256 slope);
 
-    function voteForGaugeWeights(
-        bytes32 id,
-        address user,
-        uint256 userWeight
-    ) external;
+    function timeWeight(address addr) external view returns (uint256 lastScheduledTime);
 
-    function voteForGaugeWeights(bytes32 id, uint256 _user_weight) external;
+    function pointsSum(int128 gaugeType, uint256 time) external view returns (uint256 bias, uint256 slope);
+
+    function timeSum(int128 gaugeType) external view returns (uint256 lastScheduledTime);
+
+    function pointsTotal(uint256 time) external view returns (uint256 totalWeight);
+
+    function timeTotal() external view returns (uint256 lastScheduledTime);
+
+    function pointsTypeWeight(int128 gaugeType, uint256 time) external view returns (uint256 typeWeight);
+
+    function timeTypeWeight(int128 gaugeType) external view returns (uint256 lastScheduledTime);
+
+    function gaugeTypes(address addr) external view returns (int128);
+
+    function getGaugeWeight(address addr) external view returns (uint256);
+
+    function getTypeWeight(int128 gaugeType) external view returns (uint256);
+
+    function getTotalWeight() external view returns (uint256);
+
+    function getWeightsSumPerType(int128 gaugeType) external view returns (uint256);
+
+    function gaugeRelativeWeight(address addr) external view returns (uint256);
+
+    function gaugeRelativeWeight(address addr, uint256 time) external view returns (uint256);
+
+    function checkpoint() external;
+
+    function checkpointGauge(address addr) external;
+
+    function gaugeRelativeWeightWrite(address addr) external returns (uint256);
+
+    function gaugeRelativeWeightWrite(address addr, uint256 time) external returns (uint256);
+
+    function voteForGaugeWeights(address addr, uint256 _user_weight) external;
 }
