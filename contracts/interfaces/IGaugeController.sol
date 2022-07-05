@@ -65,6 +65,22 @@ interface IGaugeController {
 
     function gaugeRelativeWeight(address addr, uint256 time) external view returns (uint256);
 
+    function addType(string calldata name) external;
+
+    function addType(string calldata name, uint256 weight) external;
+
+    function changeTypeWeight(int128 gaugeType, uint256 weight) external;
+
+    function addGauge(address addr, int128 gaugeType) external;
+
+    function addGauge(
+        address addr,
+        int128 gaugeType,
+        uint256 weight
+    ) external;
+
+    function changeGaugeWeight(address addr, uint256 weight) external;
+
     function checkpoint() external;
 
     function checkpointGauge(address addr) external;

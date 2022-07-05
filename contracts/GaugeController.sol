@@ -47,7 +47,7 @@ contract GaugeController is Ownable, IGaugeController {
     // of zero as meaning the gauge has not been set
     mapping(address => int128) internal _gaugeTypes;
 
-    mapping(address => mapping(address => VotedSlope)) public override voteUserSlopes; // user -> identifier -> VotedSlope
+    mapping(address => mapping(address => VotedSlope)) public override voteUserSlopes; // user -> addr -> VotedSlope
     mapping(address => uint256) public override voteUserPower; // Total vote power used by user
     mapping(address => mapping(address => uint256)) public override lastUserVote; // Last user vote's timestamp for each gauge address
 
@@ -57,9 +57,9 @@ contract GaugeController is Ownable, IGaugeController {
     // time_* are for the last change timestamp
     // timestamps are rounded to whole weeks
 
-    mapping(address => mapping(uint256 => Point)) public override pointsWeight; // identifier -> time -> Point
-    mapping(address => mapping(uint256 => uint256)) internal _changesWeight; // identifier -> time -> slope
-    mapping(address => uint256) public override timeWeight; // identifier -> last scheduled time (next week)
+    mapping(address => mapping(uint256 => Point)) public override pointsWeight; // addr -> time -> Point
+    mapping(address => mapping(uint256 => uint256)) internal _changesWeight; // addr -> time -> slope
+    mapping(address => uint256) public override timeWeight; // addr -> last scheduled time (next week)
 
     mapping(int128 => mapping(uint256 => Point)) public override pointsSum; // gaugeType -> time -> Point
     mapping(int128 => mapping(uint256 => uint256)) internal _changesSum; // gaugeType -> time -> slope
@@ -162,7 +162,7 @@ contract GaugeController is Ownable, IGaugeController {
      * @notice Add gauge type with name `name` and weight `weight`
      * @param name Name of gauge type
      */
-    function addType(string memory name) external {
+    function addType(string memory name) external override {
         addType(name, 0);
     }
 
@@ -171,7 +171,7 @@ contract GaugeController is Ownable, IGaugeController {
      * @param name Name of gauge type
      * @param weight Weight of gauge type
      */
-    function addType(string memory name, uint256 weight) public onlyOwner {
+    function addType(string memory name, uint256 weight) public override onlyOwner {
         int128 gaugeType = gaugeTypesLength;
         gaugeTypeNames[gaugeType] = name;
         gaugeTypesLength = gaugeType + 1;
@@ -186,21 +186,21 @@ contract GaugeController is Ownable, IGaugeController {
      * @param gaugeType Type id
      * @param weight New type weight
      */
-    function changeTypeWeight(int128 gaugeType, uint256 weight) external onlyOwner {
+    function changeTypeWeight(int128 gaugeType, uint256 weight) external override onlyOwner {
         _changeTypeWeight(gaugeType, weight);
     }
 
     /**
-     * @notice Add gauge `id` of type `gaugeType` with weight `weight`
+     * @notice Add gauge `addr` of type `gaugeType` with weight `weight`
      * @param addr Gauge address
      * @param gaugeType Gauge type
      */
-    function addGauge(address addr, int128 gaugeType) external {
+    function addGauge(address addr, int128 gaugeType) external override {
         addGauge(addr, gaugeType, 0);
     }
 
     /**
-     * @notice Add gauge `id` of type `gaugeType` with weight `weight`
+     * @notice Add gauge `addr` of type `gaugeType` with weight `weight`
      * @param addr Gauge address
      * @param gaugeType Gauge type
      * @param weight Gauge weight
@@ -209,7 +209,7 @@ contract GaugeController is Ownable, IGaugeController {
         address addr,
         int128 gaugeType,
         uint256 weight
-    ) public onlyOwner {
+    ) public override onlyOwner {
         require((gaugeType >= 0) && (gaugeType < gaugeTypesLength), "GC: INVALID_GAUGE_TYPE");
         require(_gaugeTypes[addr] == 0, "GC: DUPLICATE_GAUGE");
 
@@ -240,11 +240,11 @@ contract GaugeController is Ownable, IGaugeController {
     }
 
     /**
-     * @notice Change weight of gauge `id` to `weight`
+     * @notice Change weight of gauge `addr` to `weight`
      * @param addr Gauge address
      * @param weight New Gauge weight
      */
-    function changeGaugeWeight(address addr, uint256 weight) external onlyOwner {
+    function changeGaugeWeight(address addr, uint256 weight) external override onlyOwner {
         _changeGaugeWeight(addr, weight);
     }
 
@@ -376,7 +376,7 @@ contract GaugeController is Ownable, IGaugeController {
     }
 
     /**
-     * @notice Change weight of gauge `id` to `weight`
+     * @notice Change weight of gauge `addr` to `weight`
      * @param addr Gauge address
      * @param weight New Gauge weight
      */
