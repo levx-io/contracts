@@ -85,7 +85,7 @@ contract GaugeController is Ownable, IGaugeController {
         interval = _interval;
         weightVoteDelay = _weightVoteDelay;
         votingEscrow = _votingEscrow;
-        timeTotal = (block.timestamp / interval) * interval;
+        timeTotal = (block.timestamp / _interval) * _interval;
     }
 
     /**
@@ -218,7 +218,8 @@ contract GaugeController is Ownable, IGaugeController {
         gauges[n] = addr;
 
         _gaugeTypes[addr] = gaugeType + 1;
-        uint256 next_time = ((block.timestamp + interval) / interval) * interval;
+        uint256 _interval = interval;
+        uint256 next_time = ((block.timestamp + _interval) / _interval) * _interval;
 
         if (weight > 0) {
             uint256 _type_weight = _getTypeWeight(gaugeType);
@@ -298,7 +299,8 @@ contract GaugeController is Ownable, IGaugeController {
         address escrow = votingEscrow;
         uint256 slope = uint256(uint128(IVotingEscrow(escrow).getLastUserSlope(msg.sender)));
         uint256 lock_end = IVotingEscrow(escrow).unlockTime(msg.sender);
-        uint256 next_time = ((block.timestamp + interval) / interval) * interval;
+        uint256 _interval = interval;
+        uint256 next_time = ((block.timestamp + _interval) / _interval) * _interval;
         require(lock_end > next_time, "GC: LOCK_EXPIRES_TOO_EARLY");
         require((userWeight >= 0) && (userWeight <= 10000), "GC: VOTING_POWER_ALL_USED");
         require(block.timestamp >= lastUserVote[msg.sender][addr] + weightVoteDelay, "GC: VOTED_TOO_EARLY");
@@ -344,7 +346,8 @@ contract GaugeController is Ownable, IGaugeController {
      * @return Value of relative weight normalized to 1e18
      */
     function _gaugeRelativeWeight(address addr, uint256 time) internal view returns (uint256) {
-        uint256 t = (time / interval) * interval;
+        uint256 _interval = interval;
+        uint256 t = (time / _interval) * _interval;
         uint256 _total_weight = pointsTotal[t];
 
         if (_total_weight > 0) {
@@ -364,7 +367,8 @@ contract GaugeController is Ownable, IGaugeController {
         uint256 old_weight = _getTypeWeight(gaugeType);
         uint256 old_sum = _getSum(gaugeType);
         uint256 _total_weight = _getTotal();
-        uint256 next_time = ((block.timestamp + interval) / interval) * interval;
+        uint256 _interval = interval;
+        uint256 next_time = ((block.timestamp + _interval) / _interval) * _interval;
 
         _total_weight = _total_weight + old_sum * weight - old_sum * old_weight;
         pointsTotal[next_time] = _total_weight;
@@ -388,7 +392,8 @@ contract GaugeController is Ownable, IGaugeController {
         uint256 type_weight = _getTypeWeight(gaugeType);
         uint256 old_sum = _getSum(gaugeType);
         uint256 _total_weight = _getTotal();
-        uint256 next_time = ((block.timestamp + interval) / interval) * interval;
+        uint256 _interval = interval;
+        uint256 next_time = ((block.timestamp + _interval) / _interval) * _interval;
 
         pointsWeight[addr][next_time].bias = weight;
         timeWeight[addr] = next_time;
@@ -410,10 +415,11 @@ contract GaugeController is Ownable, IGaugeController {
      * @return Total weight
      */
     function _getTotal() internal returns (uint256) {
+        uint256 _interval = interval;
         uint256 t = timeTotal;
         int128 _n_gaugeTypes = gaugeTypesLength;
         // If we have already checkpointed - still need to change the value
-        if (t > block.timestamp) t -= interval;
+        if (t > block.timestamp) t -= _interval;
         uint256 pt = pointsTotal[t];
 
         for (int128 gaugeType; gaugeType < 100; gaugeType++) {
@@ -424,7 +430,7 @@ contract GaugeController is Ownable, IGaugeController {
 
         for (uint256 i; i < 500; i++) {
             if (t > block.timestamp) break;
-            t += interval;
+            t += _interval;
             pt = 0;
             // Scales as n_types * n_unchecked_weeks (hopefully 1 at most)
             for (int128 gaugeType; gaugeType < 100; gaugeType++) {
@@ -450,10 +456,11 @@ contract GaugeController is Ownable, IGaugeController {
         uint256 t = timeSum[gaugeType];
         if (t > 0) {
             Point memory pt = pointsSum[gaugeType][t];
+            uint256 _interval = interval;
             for (uint256 i; i < 500; i++) {
                 if (t > block.timestamp) break;
-                t += interval;
-                uint256 d_bias = pt.slope * interval;
+                t += _interval;
+                uint256 d_bias = pt.slope * _interval;
                 if (pt.bias > d_bias) {
                     pt.bias -= d_bias;
                     uint256 d_slope = _changesSum[gaugeType][t];
@@ -479,9 +486,10 @@ contract GaugeController is Ownable, IGaugeController {
         uint256 t = timeTypeWeight[gaugeType];
         if (t > 0) {
             uint256 w = pointsTypeWeight[gaugeType][t];
+            uint256 _interval = interval;
             for (uint256 i; i < 500; i++) {
                 if (t > block.timestamp) break;
-                t += interval;
+                t += _interval;
                 pointsTypeWeight[gaugeType][t] = w;
                 if (t > block.timestamp) timeTypeWeight[gaugeType] = t;
             }
@@ -499,10 +507,11 @@ contract GaugeController is Ownable, IGaugeController {
         uint256 t = timeWeight[addr];
         if (t > 0) {
             Point memory pt = pointsWeight[addr][t];
+            uint256 _interval = interval;
             for (uint256 i; i < 500; i++) {
                 if (t > block.timestamp) break;
-                t += interval;
-                uint256 d_bias = pt.slope * interval;
+                t += _interval;
+                uint256 d_bias = pt.slope * _interval;
                 if (pt.bias > d_bias) {
                     pt.bias -= d_bias;
                     uint256 d_slope = _changesWeight[addr][t];
