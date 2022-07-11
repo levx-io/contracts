@@ -22,13 +22,13 @@ library Signature {
         // these malleable signatures as well.
         require(
             uint256(s) <= 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0,
-            "SHOYU: INVALID_SIGNATURE_S_VALUE"
+            "LEVX: INVALID_SIGNATURE_S_VALUE"
         );
-        require(v == 27 || v == 28, "SHOYU: INVALID_SIGNATURE_V_VALUE");
+        require(v == 27 || v == 28, "LEVX: INVALID_SIGNATURE_V_VALUE");
 
         // If the signature is valid (and not malleable), return the signer address
         address signer = ecrecover(hash, v, r, s);
-        require(signer != address(0), "SHOYU: INVALID_SIGNATURE");
+        require(signer != address(0), "LEVX: INVALID_SIGNATURE");
 
         return signer;
     }
@@ -45,10 +45,10 @@ library Signature {
         if (Address.isContract(signer)) {
             require(
                 IERC1271(signer).isValidSignature(digest, abi.encodePacked(r, s, v)) == 0x1626ba7e,
-                "SHOYU: UNAUTHORIZED"
+                "LEVX: UNAUTHORIZED"
             );
         } else {
-            require(recover(digest, v, r, s) == signer, "SHOYU: UNAUTHORIZED");
+            require(recover(digest, v, r, s) == signer, "LEVX: UNAUTHORIZED");
         }
     }
 }
