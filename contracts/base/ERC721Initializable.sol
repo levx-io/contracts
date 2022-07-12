@@ -66,7 +66,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
      * @dev See {IERC721-balanceOf}.
      */
     function balanceOf(address owner) public view virtual override returns (uint256) {
-        require(owner != address(0), "SHOYU: INVALID_OWNER");
+        require(owner != address(0), "ERC721: INVALID_OWNER");
         return _balances[owner];
     }
 
@@ -95,7 +95,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
      * @dev See {IERC721Metadata-tokenURI}.
      */
     function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
-        require(_exists(tokenId), "SHOYU: INVALID_TOKEN_ID");
+        require(_exists(tokenId), "ERC721: INVALID_TOKEN_ID");
 
         string memory baseURI = _baseURI();
         return bytes(baseURI).length > 0 ? string(abi.encodePacked(baseURI, tokenId.toString())) : "";
@@ -114,9 +114,9 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
      */
     function approve(address to, uint256 tokenId) public virtual override {
         address owner = ERC721Initializable.ownerOf(tokenId);
-        require(to != owner, "SHOYU: INVALID_TO");
+        require(to != owner, "ERC721: INVALID_TO");
 
-        require(msg.sender == owner || isApprovedForAll(owner, msg.sender), "SHOYU: FORBIDDEN");
+        require(msg.sender == owner || isApprovedForAll(owner, msg.sender), "ERC721: FORBIDDEN");
 
         _approve(to, tokenId);
     }
@@ -125,7 +125,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
      * @dev See {IERC721-getApproved}.
      */
     function getApproved(uint256 tokenId) public view virtual override returns (address) {
-        require(_exists(tokenId), "SHOYU: INVALID_TOKEN_ID");
+        require(_exists(tokenId), "ERC721: INVALID_TOKEN_ID");
 
         return _tokenApprovals[tokenId];
     }
@@ -153,7 +153,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
         uint256 tokenId
     ) public virtual override {
         //solhint-disable-next-line max-line-length
-        require(_isApprovedOrOwner(msg.sender, tokenId), "SHOYU: NOT_APPROVED_NOR_OWNER");
+        require(_isApprovedOrOwner(msg.sender, tokenId), "ERC721: NOT_APPROVED_NOR_OWNER");
 
         _transfer(from, to, tokenId);
     }
@@ -178,7 +178,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
         uint256 tokenId,
         bytes memory _data
     ) public virtual override {
-        require(_isApprovedOrOwner(msg.sender, tokenId), "SHOYU: FORBIDDEN");
+        require(_isApprovedOrOwner(msg.sender, tokenId), "ERC721: FORBIDDEN");
         _safeTransfer(from, to, tokenId, _data);
     }
 
@@ -207,7 +207,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
         bytes memory _data
     ) internal virtual {
         _transfer(from, to, tokenId);
-        require(_checkOnERC721Received(from, to, tokenId, _data), "SHOYU: INVALID_RECEIVER");
+        require(_checkOnERC721Received(from, to, tokenId, _data), "ERC721: INVALID_RECEIVER");
     }
 
     /**
@@ -230,7 +230,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
      * - `tokenId` must exist.
      */
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view virtual returns (bool) {
-        require(_exists(tokenId), "SHOYU: INVALID_TOKEN_ID");
+        require(_exists(tokenId), "ERC721: INVALID_TOKEN_ID");
         address owner = ERC721Initializable.ownerOf(tokenId);
         return (spender == owner || getApproved(tokenId) == spender || isApprovedForAll(owner, spender));
     }
@@ -240,7 +240,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
         address operator,
         bool approved
     ) internal {
-        require(operator != owner, "SHOYU: INVALID_OPERATOR");
+        require(operator != owner, "ERC721: INVALID_OPERATOR");
 
         _operatorApprovals[owner][operator] = approved;
         emit ApprovalForAll(owner, operator, approved);
@@ -253,7 +253,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
 
     function _parkTokenIds(uint256 toTokenId) internal virtual {
         uint256 fromTokenId = _toTokenIdParked;
-        require(toTokenId > fromTokenId, "SHOYU: INVALID_TO_TOKEN_ID");
+        require(toTokenId > fromTokenId, "ERC721: INVALID_TO_TOKEN_ID");
 
         _toTokenIdParked = toTokenId;
     }
@@ -282,7 +282,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
         bytes memory _data
     ) internal virtual {
         _mint(to, tokenId);
-        require(_checkOnERC721Received(address(0), to, tokenId, _data), "SHOYU: INVALID_RECEIVER");
+        require(_checkOnERC721Received(address(0), to, tokenId, _data), "ERC721: INVALID_RECEIVER");
     }
 
     /**
@@ -298,8 +298,8 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
      * Emits a {Transfer} event.
      */
     function _mint(address to, uint256 tokenId) internal virtual {
-        require(to != address(0), "SHOYU: INVALID_TO");
-        require(!_exists(tokenId), "SHOYU: ALREADY_MINTED");
+        require(to != address(0), "ERC721: INVALID_TO");
+        require(!_exists(tokenId), "ERC721: ALREADY_MINTED");
 
         _beforeTokenTransfer(address(0), to, tokenId);
 
@@ -321,7 +321,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
      */
     function _burn(uint256 tokenId) internal virtual {
         address owner = ERC721Initializable.ownerOf(tokenId);
-        require(owner != address(0), "SHOYU: INVALID_TOKEN_ID");
+        require(owner != address(0), "ERC721: INVALID_TOKEN_ID");
 
         _beforeTokenTransfer(owner, address(0), tokenId);
 
@@ -350,8 +350,8 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
         address to,
         uint256 tokenId
     ) internal virtual {
-        require(ERC721Initializable.ownerOf(tokenId) == from, "SHOYU: TRANSFER_FORBIDDEN");
-        require(to != address(0), "SHOYU: INVALID_RECIPIENT");
+        require(ERC721Initializable.ownerOf(tokenId) == from, "ERC721: TRANSFER_FORBIDDEN");
+        require(to != address(0), "ERC721: INVALID_RECIPIENT");
 
         _beforeTokenTransfer(from, to, tokenId);
 
@@ -396,7 +396,7 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
                 return retval == IERC721Receiver(to).onERC721Received.selector;
             } catch (bytes memory reason) {
                 if (reason.length == 0) {
-                    revert("SHOYU: INVALID_RECEIVER");
+                    revert("ERC721: INVALID_RECEIVER");
                 } else {
                     // solhint-disable-next-line no-inline-assembly
                     assembly {
