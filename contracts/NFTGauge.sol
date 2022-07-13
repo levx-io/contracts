@@ -129,7 +129,7 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
         address currency = _bid(tokenId, owner, price, sales[tokenId][owner]);
         require(currency != address(0), "NFTG: ONLY_ETH_ACCEPTABLE");
 
-        INFTGaugeAdmin(admin).executePayment(currency, msg.sender, address(this), price);
+        INFTGaugeAdmin(admin).executePayment(currency, msg.sender, price);
     }
 
     function _bid(
@@ -172,7 +172,7 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
         address currency = _claim(tokenId, owner, price, sales[tokenId][owner]);
         require(currency != address(0), "NFTG: ONLY_ETH_ACCEPTABLE");
 
-        INFTGaugeAdmin(admin).executePayment(currency, msg.sender, address(this), price);
+        INFTGaugeAdmin(admin).executePayment(currency, msg.sender, price);
     }
 
     function _claim(
@@ -206,7 +206,7 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
     ) external {
         _makeOffer(tokenId, price, currency, deadline);
 
-        INFTGaugeAdmin(admin).executePayment(currency, msg.sender, address(this), price);
+        INFTGaugeAdmin(admin).executePayment(currency, msg.sender, price);
     }
 
     function _makeOffer(

@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 interface INFTGaugeAdmin {
     event WhitelistToken(address indexed token);
-    event CreateNFTGauge(address indexed nftContract);
+    event CreateNFTGauge(address indexed nftContract, address indexed gauge);
     event UpdateFee(uint256 fee);
 
     function tokenURIRenderer() external view returns (address);
@@ -11,6 +11,10 @@ interface INFTGaugeAdmin {
     function fee() external view returns (uint256);
 
     function tokenWhitelisted(address token) external view returns (bool);
+
+    function gauges(address nftContract) external view returns (address);
+
+    function isGauge(address addr) external view returns (bool);
 
     function whitelistToken(address token) external;
 
@@ -21,7 +25,6 @@ interface INFTGaugeAdmin {
     function executePayment(
         address token,
         address from,
-        address to,
         uint256 amount
     ) external;
 }

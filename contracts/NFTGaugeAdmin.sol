@@ -16,6 +16,8 @@ contract NFTGaugeAdmin is CloneFactory, Ownable, INFTGaugeAdmin {
 
     uint256 public override fee;
     mapping(address => bool) public override tokenWhitelisted;
+    mapping(address => address) public override gauges;
+    mapping(address => bool) public override isGauge;
 
     constructor(address _tokenURIRenderer, uint256 _fee) {
         tokenURIRenderer = _tokenURIRenderer;
@@ -41,20 +43,25 @@ contract NFTGaugeAdmin is CloneFactory, Ownable, INFTGaugeAdmin {
     }
 
     function createNFTGauge(address nftContract) external override returns (address gauge) {
+        require(gauges[nftContract] == address(0), "NFTGA: GAUGE_CREATED");
+
         gauge = _createClone(_target);
         NFTGauge(gauge).initialize(nftContract, tokenURIRenderer);
 
-        emit CreateNFTGauge(nftContract);
+        gauges[nftContract] = gauge;
+        isGauge[gauge] = true;
+
+        emit CreateNFTGauge(nftContract, gauge);
     }
 
     function executePayment(
         address token,
         address from,
-        address to,
         uint256 amount
     ) external override {
-        require(tokenWhitelisted[token], "PG: TOKEN_NOT_WHITELIST");
+        require(isGauge[msg.sender], "NFTGA: FORBIDDEN");
+        require(tokenWhitelisted[token], "NFTGA: TOKEN_NOT_WHITELIST");
 
-        IERC20(token).safeTransferFrom(from, to, amount);
+        IERC20(token).safeTransferFrom(from, msg.sender, amount);
     }
 }
