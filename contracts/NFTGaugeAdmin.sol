@@ -46,7 +46,7 @@ contract NFTGaugeAdmin is CloneFactory, Ownable, INFTGaugeAdmin {
         require(gauges[nftContract] == address(0), "NFTGA: GAUGE_CREATED");
 
         gauge = _createClone(_target);
-        NFTGauge(gauge).initialize(nftContract, tokenURIRenderer);
+        INFTGauge(gauge).initialize(nftContract, tokenURIRenderer);
 
         gauges[nftContract] = gauge;
         isGauge[gauge] = true;

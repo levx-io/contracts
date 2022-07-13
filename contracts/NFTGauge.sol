@@ -5,9 +5,10 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./base/WrappedERC721.sol";
+import "./interfaces/INFTGauge.sol";
 import "./interfaces/INFTGaugeAdmin.sol";
 
-contract NFTGauge is WrappedERC721, ReentrancyGuard {
+contract NFTGauge is WrappedERC721, ReentrancyGuard, INFTGauge {
     using SafeERC20 for IERC20;
 
     struct Order {
@@ -17,69 +18,33 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
         bool auction;
     }
 
-    address public admin;
-    mapping(uint256 => bool) public withdrawn;
-    mapping(uint256 => mapping(address => Order)) public sales;
-    mapping(uint256 => mapping(address => address)) public currentBidders;
-    mapping(uint256 => mapping(address => mapping(address => Order))) public offers;
+    address public override admin;
+    mapping(uint256 => mapping(address => Order)) public override sales;
+    mapping(uint256 => mapping(address => address)) public override currentBidders;
+    mapping(uint256 => mapping(address => mapping(address => Order))) public override offers;
 
-    event ListForSale(
-        uint256 indexed tokenId,
-        address indexed owner,
-        uint256 price,
-        address currency,
-        uint64 deadline,
-        bool indexed auction
-    );
-    event CancelListing(uint256 indexed tokenId, address indexed owner);
-    event MakeOffer(
-        uint256 indexed tokenId,
-        address indexed taker,
-        address indexed maker,
-        uint256 price,
-        address currency,
-        uint256 deadline
-    );
-    event WithdrawOffer(uint256 indexed tokenId, address indexed taker, address indexed maker);
-    event AcceptOffer(
-        uint256 indexed tokenId,
-        address indexed taker,
-        address indexed maker,
-        uint256 price,
-        address currency,
-        uint256 deadline
-    );
-    event Bid(uint256 indexed tokenId, address indexed owner, address indexed bidder, uint256 price, address currency);
-    event Claim(
-        uint256 indexed tokenId,
-        address indexed owner,
-        address indexed bidder,
-        uint256 price,
-        address currency
-    );
-
-    function initialize(address _nftContract, address _tokenURIRenderer) external initializer {
+    function initialize(address _nftContract, address _tokenURIRenderer) external override initializer {
         __WrappedERC721_init(_nftContract, _tokenURIRenderer);
 
         admin = msg.sender;
     }
 
-    function deposit(address to, uint256 tokenId) public {
-        withdrawn[tokenId] = false;
-
+    function deposit(address to, uint256 tokenId) public override {
         _mint(to, tokenId);
         IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
+
+        emit Deposit(to, tokenId);
     }
 
-    function withdraw(address to, uint256 tokenId) public {
+    function withdraw(address to, uint256 tokenId) public override {
         require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
 
         _cancelIfListed(tokenId, msg.sender);
 
-        withdrawn[tokenId] = true;
-
         _burn(tokenId);
         IERC721(nftContract).safeTransferFrom(address(this), to, tokenId);
+
+        emit Withdraw(to, tokenId);
     }
 
     function listForSale(
@@ -88,7 +53,7 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
         address currency,
         uint64 deadline,
         bool auction
-    ) external {
+    ) external override {
         require(block.timestamp < deadline, "NFTG: INVALID_DEADLINE");
         require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
 
@@ -101,7 +66,7 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
         emit ListForSale(tokenId, msg.sender, price, currency, deadline, auction);
     }
 
-    function cancelListing(uint256 tokenId) external {
+    function cancelListing(uint256 tokenId) external override {
         require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
 
         Order storage sale = sales[tokenId][msg.sender];
@@ -114,22 +79,61 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
         emit CancelListing(tokenId, msg.sender);
     }
 
-    function bidETH(uint256 tokenId, address owner) external payable {
+    function buyWithETH(uint256 tokenId, address owner) external payable override {
+        require(msg.value > 0, "NFTG: VALUE_TOO_LOW");
+
+        address currency = _buy(tokenId, owner, msg.value, sales[tokenId][owner]);
+        require(currency == address(0), "NFTG: ETH_UNACCEPTABLE");
+        // TODO: distribute funds
+    }
+
+    function buy(
+        uint256 tokenId,
+        address owner,
+        uint256 price
+    ) external override nonReentrant {
+        address currency = _buy(tokenId, owner, price, sales[tokenId][owner]);
+        require(currency != address(0), "NFTG: ONLY_ETH_ACCEPTABLE");
+
+        INFTGaugeAdmin(admin).executePayment(currency, msg.sender, price);
+        // TODO: distribute funds
+    }
+
+    function _buy(
+        uint256 tokenId,
+        address owner,
+        uint256 price,
+        Order memory sale
+    ) internal returns (address currency) {
+        uint256 _deadline = sale.deadline;
+        require(_deadline > 0, "NFTG: NOT_LISTED_FOR_SALE");
+        require(block.timestamp <= _deadline, "NFTG: EXPIRED");
+        require(!sale.auction, "NFTG: BID_REQUIRED");
+
+        _transfer(owner, msg.sender, tokenId);
+
+        currency = sale.currency;
+        emit Buy(tokenId, owner, msg.sender, price, currency);
+    }
+
+    function bidWithETH(uint256 tokenId, address owner) external payable override {
         require(msg.value > 0, "NFTG: VALUE_TOO_LOW");
 
         address currency = _bid(tokenId, owner, msg.value, sales[tokenId][owner]);
         require(currency == address(0), "NFTG: ETH_UNACCEPTABLE");
+        // TODO: distribute funds
     }
 
     function bid(
         uint256 tokenId,
         address owner,
         uint256 price
-    ) external nonReentrant {
+    ) external override nonReentrant {
         address currency = _bid(tokenId, owner, price, sales[tokenId][owner]);
         require(currency != address(0), "NFTG: ONLY_ETH_ACCEPTABLE");
 
         INFTGaugeAdmin(admin).executePayment(currency, msg.sender, price);
+        // TODO: distribute funds
     }
 
     function _bid(
@@ -145,54 +149,39 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
 
         currency = sale.currency;
         address prevBidder = currentBidders[tokenId][owner];
+        currentBidders[tokenId][owner] = msg.sender;
         if (prevBidder != address(0)) {
             uint256 prevPrice = sale.price;
             require(price >= (prevPrice * 110) / 100, "NFTG: PRICE_TOO_LOW");
 
             _transferTokens(currency, prevBidder, prevPrice);
         }
-
-        currentBidders[tokenId][owner] = msg.sender;
+        sale.price = price;
 
         emit Bid(tokenId, owner, msg.sender, price, currency);
-    }
-
-    function claimETH(uint256 tokenId, address owner) external payable {
-        require(msg.value > 0, "NFTG: VALUE_TOO_LOW");
-
-        address currency = _claim(tokenId, owner, msg.value, sales[tokenId][owner]);
-        require(currency == address(0), "NFTG: ETH_UNACCEPTABLE");
     }
 
     function claim(
         uint256 tokenId,
         address owner,
         uint256 price
-    ) external nonReentrant {
-        address currency = _claim(tokenId, owner, price, sales[tokenId][owner]);
-        require(currency != address(0), "NFTG: ONLY_ETH_ACCEPTABLE");
-
-        INFTGaugeAdmin(admin).executePayment(currency, msg.sender, price);
-    }
-
-    function _claim(
-        uint256 tokenId,
-        address owner,
-        uint256 price,
-        Order memory sale
-    ) internal returns (address currency) {
+    ) external override {
+        Order storage sale = sales[tokenId][owner];
         uint256 _deadline = sale.deadline;
         require(_deadline > 0, "NFTG: NOT_LISTED_FOR_SALE");
-        require(block.timestamp <= _deadline, "NFTG: EXPIRED");
-        require(!sale.auction, "NFTG: NOT_CLAIMABLE");
+        require(_deadline < block.timestamp, "NFTG: NOT_EXPIRED");
+        require(sale.auction, "NFTG: NOT_CLAIMABLE");
+
+        address prevBidder = currentBidders[tokenId][owner];
+        require(prevBidder != address(0), "NFTG: NOT_BIDDEN");
 
         _transfer(owner, msg.sender, tokenId);
 
-        currency = sale.currency;
-        emit Claim(tokenId, owner, msg.sender, price, currency);
+        emit Claim(tokenId, owner, msg.sender, price, sale.currency);
+        // TODO: distribute funds
     }
 
-    function makeOfferETH(uint256 tokenId, uint64 deadline) external payable {
+    function makeOfferETH(uint256 tokenId, uint64 deadline) external payable override {
         require(msg.value > 0, "NFTG: VALUE_TOO_LOW");
 
         _makeOffer(tokenId, msg.value, address(0), deadline);
@@ -203,7 +192,7 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
         uint256 price,
         address currency,
         uint64 deadline
-    ) external {
+    ) external override {
         _makeOffer(tokenId, price, currency, deadline);
 
         INFTGaugeAdmin(admin).executePayment(currency, msg.sender, price);
@@ -225,7 +214,7 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
         emit MakeOffer(tokenId, taker, msg.sender, price, currency, uint256(deadline));
     }
 
-    function withdrawOffer(uint256 tokenId, address taker) external {
+    function withdrawOffer(uint256 tokenId, address taker) external override {
         Order storage offer = offers[tokenId][taker][msg.sender];
         uint256 _deadline = offer.deadline;
         require(_deadline > 0, "NFTG: INVALID_OFFER");
@@ -238,7 +227,7 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
         _transferTokens(_currency, msg.sender, _price);
     }
 
-    function acceptOffer(uint256 tokenId, address maker) external {
+    function acceptOffer(uint256 tokenId, address maker) external override {
         require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
 
         Order storage offer = offers[tokenId][msg.sender][maker];
@@ -282,8 +271,6 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard {
         if (_deadline > 0 && block.timestamp <= _deadline) {
             delete sales[tokenId][owner];
             delete currentBidders[tokenId][owner];
-
-            emit CancelListing(tokenId, owner);
         }
     }
 }
