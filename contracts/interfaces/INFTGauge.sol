@@ -14,10 +14,33 @@ interface INFTGauge is IWrappedERC721 {
 
     function ve() external view returns (address);
 
-    function deposit(address to, uint256 tokenId) external;
+    function points(uint256 tokenId, address user) external view returns (uint256);
 
-    function withdraw(address to, uint256 tokenId) external;
+    function pointsAt(
+        uint256 tokenId,
+        address user,
+        uint256 _block
+    ) external view returns (uint256);
 
-    event Deposit(address indexed to, uint256 indexed tokenId);
-    event Withdraw(address indexed to, uint256 indexed tokenId);
+    function pointsSum(uint256 tokenId) external view returns (uint256);
+
+    function pointsSumAt(uint256 tokenId, uint256 _block) external view returns (uint256);
+
+    function pointsTotal() external view returns (uint256);
+
+    function pointsTotalAt(uint256 _block) external view returns (uint256);
+
+    function wrap(
+        uint256 tokenId,
+        address to,
+        uint256 userWeight
+    ) external;
+
+    function unwrap(uint256 tokenId, address to) external;
+
+    function vote(uint256 tokenId, uint256 userWeight) external;
+
+    event Wrap(uint256 indexed tokenId, address indexed to);
+    event Unwrap(uint256 indexed tokenId, address indexed to);
+    event Vote(uint256 indexed tokenId, address indexed user, uint256 weight);
 }

@@ -4,10 +4,20 @@ pragma solidity ^0.8.14;
 import "./base/WrappedERC721.sol";
 import "./interfaces/INFTGauge.sol";
 import "./interfaces/IGaugeController.sol";
+import "./interfaces/IVotingEscrow.sol";
 
 contract NFTGauge is WrappedERC721, INFTGauge {
+    struct Checkpoint {
+        uint128 fromBlock;
+        uint128 value;
+    }
+
     address public override controller;
     address public override ve;
+
+    mapping(uint256 => mapping(address => Checkpoint[])) internal _points;
+    mapping(uint256 => Checkpoint[]) internal _pointsSum;
+    Checkpoint[] internal _pointsTotal;
 
     function initialize(
         address _nftContract,
@@ -20,19 +30,54 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         ve = IGaugeController(_controller).votingEscrow();
     }
 
+    function points(uint256 tokenId, address user) external view returns (uint256) {
+        return _exists(tokenId) ? _getValueAt(_points[tokenId][user], block.timestamp) : 0;
+    }
+
+    function pointsAt(
+        uint256 tokenId,
+        address user,
+        uint256 _block
+    ) external view returns (uint256) {
+        return _exists(tokenId) ? _getValueAt(_points[tokenId][user], _block) : 0;
+    }
+
+    function pointsSum(uint256 tokenId) external view returns (uint256) {
+        return _getValueAt(_pointsSum[tokenId], block.timestamp);
+    }
+
+    function pointsSumAt(uint256 tokenId, uint256 _block) external view returns (uint256) {
+        return _getValueAt(_pointsSum[tokenId], _block);
+    }
+
+    function pointsTotal() external view returns (uint256) {
+        return _getValueAt(_pointsTotal, block.timestamp);
+    }
+
+    function pointsTotalAt(uint256 _block) external view returns (uint256) {
+        return _getValueAt(_pointsTotal, _block);
+    }
+
     /**
      * @notice Mint a wrapped NFT and commit gauge voting to this gauge addr
      * @param to The owner of the newly minted wrapped NFT
      * @param tokenId Token Id to deposit
+     * @param userWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
      */
-    function deposit(address to, uint256 tokenId) public override {
+    function wrap(
+        uint256 tokenId,
+        address to,
+        uint256 userWeight
+    ) public override {
         _mint(to, tokenId);
         IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
 
-        emit Deposit(to, tokenId);
+        vote(tokenId, userWeight);
+
+        emit Wrap(tokenId, to);
     }
 
-    function withdraw(address to, uint256 tokenId) public override {
+    function unwrap(uint256 tokenId, address to) public override {
         require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
 
         _cancelIfListed(tokenId, msg.sender);
@@ -40,6 +85,72 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         _burn(tokenId);
         IERC721(nftContract).safeTransferFrom(address(this), to, tokenId);
 
-        emit Withdraw(to, tokenId);
+        Checkpoint[] storage checkpointsSum = _pointsSum[tokenId];
+        uint256 sum = checkpointsSum[checkpointsSum.length - 1].value;
+        _updateValueAtNow(checkpointsSum, 0);
+        _updateValueAtNow(_pointsTotal, _pointsTotal[_pointsTotal.length - 1].value - sum);
+
+        emit Unwrap(tokenId, to);
+    }
+
+    function vote(uint256 tokenId, uint256 userWeight) public override {
+        uint256 balance = IVotingEscrow(ve).balanceOf(msg.sender);
+        uint256 pointNew = (balance * userWeight) / 10000;
+
+        Checkpoint[] storage checkpoints = _points[tokenId][msg.sender];
+        uint256 pointOld = checkpoints[checkpoints.length - 1].value;
+        _updateValueAtNow(checkpoints, pointNew);
+
+        Checkpoint[] storage checkpointsSum = _pointsSum[tokenId];
+        _updateValueAtNow(checkpointsSum, checkpointsSum[checkpointsSum.length - 1].value + pointNew - pointOld);
+        _updateValueAtNow(_pointsTotal, _pointsTotal[_pointsTotal.length - 1].value + pointNew - pointOld);
+
+        IGaugeController(controller).voteForGaugeWeights(msg.sender, userWeight);
+
+        emit Vote(tokenId, msg.sender, userWeight);
+    }
+
+    /**
+     * @dev `_getValueAt` retrieves the number of tokens at a given block number
+     * @param checkpoints The history of values being queried
+     * @param _block The block number to retrieve the value at
+     * @return The weight at `_block`
+     */
+    function _getValueAt(Checkpoint[] storage checkpoints, uint256 _block) internal view returns (uint256) {
+        if (checkpoints.length == 0) return 0;
+
+        // Shortcut for the actual value
+        Checkpoint storage last = checkpoints[checkpoints.length - 1];
+        if (_block >= last.fromBlock) return last.value;
+        if (_block < checkpoints[0].fromBlock) return 0;
+
+        // Binary search of the value in the array
+        uint256 min = 0;
+        uint256 max = checkpoints.length - 1;
+        while (max > min) {
+            uint256 mid = (max + min + 1) / 2;
+            if (checkpoints[mid].fromBlock <= _block) {
+                min = mid;
+            } else {
+                max = mid - 1;
+            }
+        }
+        return checkpoints[min].value;
+    }
+
+    /**
+     * @dev `_updateValueAtNow` is used to update checkpoints
+     * @param checkpoints The history of data being updated
+     * @param _value The new number of weight
+     */
+    function _updateValueAtNow(Checkpoint[] storage checkpoints, uint256 _value) internal {
+        if ((checkpoints.length == 0) || (checkpoints[checkpoints.length - 1].fromBlock < block.number)) {
+            Checkpoint storage newCheckPoint = checkpoints.push();
+            newCheckPoint.fromBlock = uint128(block.number);
+            newCheckPoint.value = uint128(_value);
+        } else {
+            Checkpoint storage oldCheckPoint = checkpoints[checkpoints.length - 1];
+            oldCheckPoint.value = uint128(_value);
+        }
     }
 }
