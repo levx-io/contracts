@@ -2,6 +2,10 @@
 pragma solidity ^0.8.0;
 
 interface INFTGauge {
+    function controller() external view returns (address);
+
+    function ve() external view returns (address);
+
     function admin() external view returns (address);
 
     function sales(uint256 tokenId, address owner)
@@ -30,7 +34,11 @@ interface INFTGauge {
             bool auction
         );
 
-    function initialize(address _nftContract, address _tokenURIRenderer) external;
+    function initialize(
+        address _nftContract,
+        address _tokenURIRenderer,
+        address _controller
+    ) external;
 
     function deposit(address to, uint256 tokenId) external;
 

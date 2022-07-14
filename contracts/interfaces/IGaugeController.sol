@@ -89,5 +89,5 @@ interface IGaugeController {
 
     function gaugeRelativeWeightWrite(address addr, uint256 time) external returns (uint256);
 
-    function voteForGaugeWeights(address addr, uint256 _user_weight) external;
+    function voteForGaugeWeights(address user, uint256 userWeight) external;
 }

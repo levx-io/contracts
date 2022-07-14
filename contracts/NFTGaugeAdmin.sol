@@ -12,6 +12,7 @@ contract NFTGaugeAdmin is CloneFactory, Ownable, INFTGaugeAdmin {
     using SafeERC20 for IERC20;
 
     address public immutable override tokenURIRenderer;
+    address public immutable override controller;
     address internal immutable _target;
 
     uint256 public override fee;
@@ -19,14 +20,19 @@ contract NFTGaugeAdmin is CloneFactory, Ownable, INFTGaugeAdmin {
     mapping(address => address) public override gauges;
     mapping(address => bool) public override isGauge;
 
-    constructor(address _tokenURIRenderer, uint256 _fee) {
+    constructor(
+        address _tokenURIRenderer,
+        address _controller,
+        uint256 _fee
+    ) {
         tokenURIRenderer = _tokenURIRenderer;
+        controller = _controller;
         fee = _fee;
 
         emit UpdateFee(_fee);
 
         NFTGauge gauge = new NFTGauge();
-        gauge.initialize(address(0), address(0));
+        gauge.initialize(address(0), address(0), address(0));
         _target = address(gauge);
     }
 
@@ -46,7 +52,7 @@ contract NFTGaugeAdmin is CloneFactory, Ownable, INFTGaugeAdmin {
         require(gauges[nftContract] == address(0), "NFTGA: GAUGE_CREATED");
 
         gauge = _createClone(_target);
-        INFTGauge(gauge).initialize(nftContract, tokenURIRenderer);
+        INFTGauge(gauge).initialize(nftContract, tokenURIRenderer, controller);
 
         gauges[nftContract] = gauge;
         isGauge[gauge] = true;

@@ -8,6 +8,8 @@ interface INFTGaugeAdmin {
 
     function tokenURIRenderer() external view returns (address);
 
+    function controller() external view returns (address);
+
     function fee() external view returns (uint256);
 
     function tokenWhitelisted(address token) external view returns (bool);

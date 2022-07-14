@@ -291,50 +291,56 @@ contract GaugeController is Ownable, IGaugeController {
     }
 
     /**
-     * @notice Allocate voting power for changing pool weights on behalf of a user
-     * @param addr Gauge which `user` votes for
+     * @notice Allocate voting power for changing pool weights on behalf of a user (only called by gauges)
+     * @param user Actual user whose voting power will be utilized
      * @param userWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
      */
-    function voteForGaugeWeights(address addr, uint256 userWeight) external override {
+    function voteForGaugeWeights(address user, uint256 userWeight) external override {
         address escrow = votingEscrow;
-        uint256 slope = uint256(uint128(IVotingEscrow(escrow).getLastUserSlope(msg.sender)));
-        uint256 lock_end = IVotingEscrow(escrow).unlockTime(msg.sender);
+        uint256 slope = uint256(uint128(IVotingEscrow(escrow).getLastUserSlope(user)));
+        uint256 lock_end = IVotingEscrow(escrow).unlockTime(user);
         uint256 _interval = interval;
         uint256 next_time = ((block.timestamp + _interval) / _interval) * _interval;
         require(lock_end > next_time, "GC: LOCK_EXPIRES_TOO_EARLY");
         require((userWeight >= 0) && (userWeight <= 10000), "GC: VOTING_POWER_ALL_USED");
-        require(block.timestamp >= lastUserVote[msg.sender][addr] + weightVoteDelay, "GC: VOTED_TOO_EARLY");
+        require(block.timestamp >= lastUserVote[user][msg.sender] + weightVoteDelay, "GC: VOTED_TOO_EARLY");
 
         // Avoid stack too deep error
         {
-            int128 gaugeType = _gaugeTypes[addr] - 1;
+            int128 gaugeType = _gaugeTypes[msg.sender] - 1;
             require(gaugeType >= 0, "GC: GAUGE_NOT_ADDED");
             // Prepare slopes and biases in memory
-            VotedSlope memory old_slope = voteUserSlopes[msg.sender][addr];
+            VotedSlope memory old_slope = voteUserSlopes[user][msg.sender];
             uint256 old_dt;
             if (old_slope.end > next_time) old_dt = old_slope.end - next_time;
-            uint256 old_bias = old_slope.slope * old_dt;
             VotedSlope memory new_slope = VotedSlope({
                 slope: (slope * userWeight) / 10000,
                 end: lock_end,
                 power: userWeight
             });
-            uint256 new_bias = new_slope.slope * (lock_end - next_time);
 
             // Check and update powers (weights) used
-            uint256 power_used = voteUserPower[msg.sender];
+            uint256 power_used = voteUserPower[user];
             power_used = power_used + new_slope.power - old_slope.power;
-            voteUserPower[msg.sender] = power_used;
+            voteUserPower[user] = power_used;
             require((power_used >= 0) && (power_used <= 10000), "GC: USED_TOO_MUCH_POWER");
 
             /// Remove old and schedule new slope changes
-            _updateSlopeChanges(addr, next_time, gaugeType, old_bias, new_bias, old_slope, new_slope);
+            _updateSlopeChanges(
+                msg.sender,
+                next_time,
+                gaugeType,
+                old_slope.slope * old_dt,
+                new_slope.slope * (lock_end - next_time),
+                old_slope,
+                new_slope
+            );
         }
 
         // Record last action time
-        lastUserVote[msg.sender][addr] = block.timestamp;
+        lastUserVote[user][msg.sender] = block.timestamp;
 
-        emit VoteForGauge(block.timestamp, msg.sender, addr, userWeight);
+        emit VoteForGauge(block.timestamp, user, msg.sender, userWeight);
     }
 
     /**

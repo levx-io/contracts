@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./base/WrappedERC721.sol";
 import "./interfaces/INFTGauge.sol";
+import "./interfaces/IGaugeController.sol";
 import "./interfaces/INFTGaugeAdmin.sol";
 
 contract NFTGauge is WrappedERC721, ReentrancyGuard, INFTGauge {
@@ -18,18 +19,37 @@ contract NFTGauge is WrappedERC721, ReentrancyGuard, INFTGauge {
         bool auction;
     }
 
+    address public override controller;
+    address public override ve;
     address public override admin;
     mapping(uint256 => mapping(address => Order)) public override sales;
     mapping(uint256 => mapping(address => address)) public override currentBidders;
     mapping(uint256 => mapping(address => mapping(address => Order))) public override offers;
 
-    function initialize(address _nftContract, address _tokenURIRenderer) external override initializer {
+    function initialize(
+        address _nftContract,
+        address _tokenURIRenderer,
+        address _controller
+    ) external override initializer {
         __WrappedERC721_init(_nftContract, _tokenURIRenderer);
+
+        controller = _controller;
+        ve = IGaugeController(_controller).votingEscrow();
 
         admin = msg.sender;
     }
 
-    function deposit(address to, uint256 tokenId) public override {
+    /**
+     * @notice Mint a wrapped NFT and commit gauge voting to this gauge addr
+     * @param to The owner of the newly minted wrapped NFT
+     * @param tokenId Token Id to deposit
+     * @param userWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
+     */
+    function deposit(
+        address to,
+        uint256 tokenId,
+        uint256 userWeight
+    ) public override {
         _mint(to, tokenId);
         IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
 
