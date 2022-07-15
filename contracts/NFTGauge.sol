@@ -59,7 +59,16 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     /**
-     * @notice Mint a wrapped NFT and commit gauge voting to this gauge addr
+     * @notice Mint a wrapped NFT
+     * @param to The owner of the newly minted wrapped NFT
+     * @param tokenId Token Id to deposit
+     */
+    function wrap(uint256 tokenId, address to) external override {
+        wrap(tokenId, to, 0);
+    }
+
+    /**
+     * @notice Mint a wrapped NFT and commit gauge voting to this tokenId
      * @param to The owner of the newly minted wrapped NFT
      * @param tokenId Token Id to deposit
      * @param userWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
@@ -98,12 +107,26 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 pointNew = (balance * userWeight) / 10000;
 
         Checkpoint[] storage checkpoints = _points[tokenId][msg.sender];
-        uint256 pointOld = checkpoints[checkpoints.length - 1].value;
+        uint256 numCheckpoints = checkpoints.length;
+        uint256 pointOld;
+        if (numCheckpoints > 0) {
+            pointOld = checkpoints[numCheckpoints - 1].value;
+        }
         _updateValueAtNow(checkpoints, pointNew);
 
         Checkpoint[] storage checkpointsSum = _pointsSum[tokenId];
-        _updateValueAtNow(checkpointsSum, checkpointsSum[checkpointsSum.length - 1].value + pointNew - pointOld);
-        _updateValueAtNow(_pointsTotal, _pointsTotal[_pointsTotal.length - 1].value + pointNew - pointOld);
+        uint256 numCheckpointsSum = checkpointsSum.length;
+        if (numCheckpointsSum > 0) {
+            _updateValueAtNow(checkpointsSum, checkpointsSum[numCheckpointsSum - 1].value + pointNew - pointOld);
+        } else {
+            _updateValueAtNow(checkpointsSum, pointNew);
+        }
+        uint256 numCheckpointsTotal = _pointsTotal.length;
+        if (numCheckpointsTotal > 0) {
+            _updateValueAtNow(_pointsTotal, _pointsTotal[_pointsTotal.length - 1].value + pointNew - pointOld);
+        } else {
+            _updateValueAtNow(_pointsTotal, pointNew);
+        }
 
         IGaugeController(controller).voteForGaugeWeights(msg.sender, userWeight);
 

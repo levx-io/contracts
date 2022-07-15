@@ -30,6 +30,8 @@ interface INFTGauge is IWrappedERC721 {
 
     function pointsTotalAt(uint256 _block) external view returns (uint256);
 
+    function wrap(uint256 tokenId, address to) external;
+
     function wrap(
         uint256 tokenId,
         address to,
