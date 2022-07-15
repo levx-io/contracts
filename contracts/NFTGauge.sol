@@ -39,7 +39,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         address user,
         uint256 _block
     ) external view returns (uint256) {
-        return _exists(tokenId) ? _getValueAt(_points[tokenId][user], _block) : 0;
+        uint256 sum = _getValueAt(_pointsSum[tokenId], _block);
+        return sum > 0 ? _getValueAt(_points[tokenId][user], _block) : 0;
     }
 
     function pointsSum(uint256 tokenId) external view returns (uint256) {
