@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-interface INFTGaugeAdmin {
+interface INFTGaugeFactory {
     event WhitelistToken(address indexed token);
     event CreateNFTGauge(address indexed nftContract, address indexed gauge);
     event UpdateFee(uint256 fee);

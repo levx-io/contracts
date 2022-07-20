@@ -5,10 +5,10 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 import "./base/CloneFactory.sol";
-import "./interfaces/INFTGaugeAdmin.sol";
+import "./interfaces/INFTGaugeFactory.sol";
 import "./NFTGauge.sol";
 
-contract NFTGaugeAdmin is CloneFactory, Ownable, INFTGaugeAdmin {
+contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     using SafeERC20 for IERC20;
 
     address public immutable override tokenURIRenderer;

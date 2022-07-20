@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "../base/ERC721Initializable.sol";
 import "../interfaces/IWrappedERC721.sol";
 import "../interfaces/ITokenURIRenderer.sol";
-import "../interfaces/INFTGaugeAdmin.sol";
+import "../interfaces/INFTGaugeFactory.sol";
 import "../libraries/Signature.sol";
 
 abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappedERC721 {
@@ -20,6 +20,12 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         address currency;
         uint64 deadline;
         bool auction;
+    }
+
+    struct Bid_ {
+        uint256 price;
+        address bidder;
+        uint64 timestamp;
     }
 
     // keccak256("Permit(address spender,uint256 tokenId,uint256 nonce,uint256 deadline)");
@@ -37,7 +43,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     address public override admin;
 
     mapping(uint256 => mapping(address => Order)) public override sales;
-    mapping(uint256 => mapping(address => address)) public override currentBidders;
+    mapping(uint256 => mapping(address => Bid_)) public override currentBids;
     mapping(uint256 => mapping(address => mapping(address => Order))) public override offers;
 
     mapping(uint256 => uint256) public nonces;
@@ -113,6 +119,10 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     ) external override {
         require(block.timestamp < deadline, "WERC721: INVALID_DEADLINE");
         require(ownerOf(tokenId) == msg.sender, "WERC721: FORBIDDEN");
+        require(
+            currency == address(0) || INFTGaugeFactory(admin).tokenWhitelisted(currency),
+            "WERC721: INVALID_CURRENCY"
+        );
 
         Order storage sale = sales[tokenId][msg.sender];
         uint256 _deadline = sale.deadline;
@@ -126,22 +136,17 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     function cancelListing(uint256 tokenId) external override {
         require(ownerOf(tokenId) == msg.sender, "WERC721: FORBIDDEN");
 
-        Order storage sale = sales[tokenId][msg.sender];
-        uint256 _deadline = sale.deadline;
-        require(_deadline > 0, "WERC721: NOT_LISTED_FOR_SALE");
-        require(block.timestamp <= _deadline, "WERC721: EXPIRED");
-
         delete sales[tokenId][msg.sender];
+        delete currentBids[tokenId][msg.sender];
 
         emit CancelListing(tokenId, msg.sender);
     }
 
-    function buyWithETH(uint256 tokenId, address owner) external payable override {
-        require(msg.value > 0, "WERC721: VALUE_TOO_LOW");
-
+    function buyETH(uint256 tokenId, address owner) external payable override {
         address currency = _buy(tokenId, owner, msg.value, sales[tokenId][owner]);
         require(currency == address(0), "WERC721: ETH_UNACCEPTABLE");
-        // TODO: distribute funds
+
+        _settleETH(owner, msg.value);
     }
 
     function buy(
@@ -152,8 +157,9 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         address currency = _buy(tokenId, owner, price, sales[tokenId][owner]);
         require(currency != address(0), "WERC721: ONLY_ETH_ACCEPTABLE");
 
-        INFTGaugeAdmin(admin).executePayment(currency, msg.sender, price);
-        // TODO: distribute funds
+        INFTGaugeFactory(admin).executePayment(currency, msg.sender, price);
+
+        _settle(currency, owner, price);
     }
 
     function _buy(
@@ -162,9 +168,9 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         uint256 price,
         Order memory sale
     ) internal returns (address currency) {
-        uint256 _deadline = sale.deadline;
-        require(_deadline > 0, "WERC721: NOT_LISTED_FOR_SALE");
-        require(block.timestamp <= _deadline, "WERC721: EXPIRED");
+        require(sale.deadline > 0, "WERC721: NOT_LISTED_FOR_SALE");
+        require(block.timestamp <= sale.deadline, "WERC721: EXPIRED");
+        require(sale.price == price, "WERC721: INVALID_PRICE");
         require(!sale.auction, "WERC721: BID_REQUIRED");
 
         _transfer(owner, msg.sender, tokenId);
@@ -173,12 +179,9 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         emit Buy(tokenId, owner, msg.sender, price, currency);
     }
 
-    function bidWithETH(uint256 tokenId, address owner) external payable override {
-        require(msg.value > 0, "WERC721: VALUE_TOO_LOW");
-
+    function bidETH(uint256 tokenId, address owner) external payable override {
         address currency = _bid(tokenId, owner, msg.value, sales[tokenId][owner]);
         require(currency == address(0), "WERC721: ETH_UNACCEPTABLE");
-        // TODO: distribute funds
     }
 
     function bid(
@@ -189,8 +192,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         address currency = _bid(tokenId, owner, price, sales[tokenId][owner]);
         require(currency != address(0), "WERC721: ONLY_ETH_ACCEPTABLE");
 
-        INFTGaugeAdmin(admin).executePayment(currency, msg.sender, price);
-        // TODO: distribute funds
+        INFTGaugeFactory(admin).executePayment(currency, msg.sender, price);
     }
 
     function _bid(
@@ -199,48 +201,50 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         uint256 price,
         Order memory sale
     ) internal returns (address currency) {
-        uint256 _deadline = sale.deadline;
-        require(_deadline > 0, "WERC721: NOT_LISTED_FOR_SALE");
-        require(block.timestamp <= _deadline, "WERC721: EXPIRED");
+        uint256 deadline = sale.deadline;
+        require(deadline > 0, "WERC721: NOT_LISTED_FOR_SALE");
         require(sale.auction, "WERC721: NOT_BIDDABLE");
 
         currency = sale.currency;
-        address prevBidder = currentBidders[tokenId][owner];
-        currentBidders[tokenId][owner] = msg.sender;
-        if (prevBidder != address(0)) {
-            uint256 prevPrice = sale.price;
-            require(price >= (prevPrice * 110) / 100, "WERC721: PRICE_TOO_LOW");
+        Bid_ memory prevBid = currentBids[tokenId][owner];
+        if (prevBid.price == 0) {
+            require(price > sale.price, "WERC721: PRICE_TOO_LOW");
+            require(block.timestamp <= deadline, "WERC721: EXPIRED");
+        } else {
+            require(price >= (prevBid.price * 110) / 100, "WERC721: PRICE_TOO_LOW");
+            require(
+                block.timestamp <= deadline || block.timestamp <= prevBid.timestamp + 10 minutes,
+                "WERC721: EXPIRED"
+            );
 
-            _transferTokens(currency, prevBidder, prevPrice);
+            _transferTokens(currency, prevBid.bidder, prevBid.price);
         }
-        sale.price = price;
+        currentBids[tokenId][owner] = Bid_(price, msg.sender, uint64(block.timestamp));
 
         emit Bid(tokenId, owner, msg.sender, price, currency);
     }
 
-    function claim(
-        uint256 tokenId,
-        address owner,
-        uint256 price
-    ) external override {
-        Order storage sale = sales[tokenId][owner];
-        uint256 _deadline = sale.deadline;
-        require(_deadline > 0, "WERC721: NOT_LISTED_FOR_SALE");
-        require(_deadline < block.timestamp, "WERC721: NOT_EXPIRED");
+    function claim(uint256 tokenId, address owner) external override nonReentrant {
+        Order memory sale = sales[tokenId][owner];
+        require(sale.deadline > 0, "WERC721: NOT_LISTED_FOR_SALE");
         require(sale.auction, "WERC721: NOT_CLAIMABLE");
 
-        address prevBidder = currentBidders[tokenId][owner];
-        require(prevBidder != address(0), "WERC721: NOT_BIDDEN");
+        Bid_ memory currentBid = currentBids[tokenId][owner];
+        require(currentBid.bidder == msg.sender, "WERC721: FORBIDDEN");
+        require(currentBid.timestamp + 10 minutes < block.timestamp, "WERC721: EXPIRED");
 
         _transfer(owner, msg.sender, tokenId);
 
-        emit Claim(tokenId, owner, msg.sender, price, sale.currency);
-        // TODO: distribute funds
+        if (sale.currency == address(0)) {
+            _settleETH(owner, sale.price);
+        } else {
+            _settle(sale.currency, owner, sale.price);
+        }
+
+        emit Claim(tokenId, owner, msg.sender, sale.price, sale.currency);
     }
 
     function makeOfferETH(uint256 tokenId, uint64 deadline) external payable override {
-        require(msg.value > 0, "WERC721: VALUE_TOO_LOW");
-
         _makeOffer(tokenId, msg.value, address(0), deadline);
     }
 
@@ -252,7 +256,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     ) external override {
         _makeOffer(tokenId, price, currency, deadline);
 
-        INFTGaugeAdmin(admin).executePayment(currency, msg.sender, price);
+        INFTGaugeFactory(admin).executePayment(currency, msg.sender, price);
     }
 
     function _makeOffer(
@@ -272,33 +276,34 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     }
 
     function withdrawOffer(uint256 tokenId, address taker) external override {
-        Order storage offer = offers[tokenId][taker][msg.sender];
-        uint256 _deadline = offer.deadline;
-        require(_deadline > 0, "WERC721: INVALID_OFFER");
+        Order memory offer = offers[tokenId][taker][msg.sender];
+        require(offer.deadline > 0, "WERC721: INVALID_OFFER");
 
         delete offers[tokenId][taker][msg.sender];
 
         emit WithdrawOffer(tokenId, taker, msg.sender);
 
-        (uint256 _price, address _currency) = (offer.price, offer.currency);
-        _transferTokens(_currency, msg.sender, _price);
+        _transferTokens(offer.currency, msg.sender, offer.price);
     }
 
-    function acceptOffer(uint256 tokenId, address maker) external override {
+    function acceptOffer(uint256 tokenId, address maker) external override nonReentrant {
         require(ownerOf(tokenId) == msg.sender, "WERC721: FORBIDDEN");
 
-        Order storage offer = offers[tokenId][msg.sender][maker];
-        uint256 _deadline = offer.deadline;
-        require(_deadline > 0 && _deadline <= block.timestamp, "WERC721: INVALID_OFFER");
-
-        delete offers[tokenId][msg.sender][maker];
+        Order memory offer = offers[tokenId][msg.sender][maker];
+        require(offer.deadline > 0, "WERC721: INVALID_OFFER");
+        require(block.timestamp <= offer.deadline, "WERC721: EXPIRED");
 
         _transfer(msg.sender, maker, tokenId);
 
-        (uint256 _price, address _currency) = (offer.price, offer.currency);
-        _transferTokens(_currency, msg.sender, _price);
+        delete offers[tokenId][msg.sender][maker];
 
-        emit AcceptOffer(tokenId, msg.sender, maker, _price, _currency, _deadline);
+        if (offer.currency == address(0)) {
+            _settleETH(msg.sender, offer.price);
+        } else {
+            _settle(offer.currency, msg.sender, offer.price);
+        }
+
+        emit AcceptOffer(tokenId, msg.sender, maker, offer.price, offer.currency, offer.deadline);
     }
 
     function _transferTokens(
@@ -314,6 +319,14 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         }
     }
 
+    function _settleETH(address to, uint256 amount) internal virtual;
+
+    function _settle(
+        address token,
+        address to,
+        uint256 amount
+    ) internal virtual;
+
     function _beforeTokenTransfer(
         address,
         address,
@@ -327,7 +340,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         uint256 _deadline = sale.deadline;
         if (_deadline > 0 && block.timestamp <= _deadline) {
             delete sales[tokenId][owner];
-            delete currentBidders[tokenId][owner];
+            delete currentBids[tokenId][owner];
         }
     }
 

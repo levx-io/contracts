@@ -177,4 +177,16 @@ contract NFTGauge is WrappedERC721, INFTGauge {
             oldCheckPoint.value = uint128(_value);
         }
     }
+
+    function _settleETH(address to, uint256 amount) internal override {
+        // TODO
+    }
+
+    function _settle(
+        address token,
+        address to,
+        uint256 amount
+    ) internal override {
+        // TODO
+    }
 }

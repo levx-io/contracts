@@ -28,7 +28,14 @@ interface IWrappedERC721 is IERC165, IERC721, IERC721Metadata {
             bool auction
         );
 
-    function currentBidders(uint256 tokenId, address owner) external view returns (address);
+    function currentBids(uint256 tokenId, address owner)
+        external
+        view
+        returns (
+            uint256 price,
+            address bidder,
+            uint64 timestamp
+        );
 
     function offers(
         uint256 tokenId,
@@ -54,7 +61,7 @@ interface IWrappedERC721 is IERC165, IERC721, IERC721Metadata {
 
     function cancelListing(uint256 tokenId) external;
 
-    function buyWithETH(uint256 tokenId, address owner) external payable;
+    function buyETH(uint256 tokenId, address owner) external payable;
 
     function buy(
         uint256 tokenId,
@@ -62,7 +69,7 @@ interface IWrappedERC721 is IERC165, IERC721, IERC721Metadata {
         uint256 price
     ) external;
 
-    function bidWithETH(uint256 tokenId, address owner) external payable;
+    function bidETH(uint256 tokenId, address owner) external payable;
 
     function bid(
         uint256 tokenId,
@@ -70,11 +77,7 @@ interface IWrappedERC721 is IERC165, IERC721, IERC721Metadata {
         uint256 price
     ) external;
 
-    function claim(
-        uint256 tokenId,
-        address owner,
-        uint256 price
-    ) external;
+    function claim(uint256 tokenId, address owner) external;
 
     function makeOfferETH(uint256 tokenId, uint64 deadline) external payable;
 
