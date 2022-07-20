@@ -12,12 +12,22 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint128 value;
     }
 
+    struct Dividend {
+        uint128 blockNumber;
+        uint128 amount;
+        address token;
+        uint256 pointsTotal;
+    }
+
     address public override controller;
     address public override ve;
 
     mapping(uint256 => mapping(address => Checkpoint[])) internal _points;
     mapping(uint256 => Checkpoint[]) internal _pointsSum;
     Checkpoint[] internal _pointsTotal;
+
+    Dividend[] public override dividends;
+    mapping(uint256 => mapping(uint256 => bool)) public override dividendClaimed;
 
     function initialize(
         address _nftContract,
@@ -57,6 +67,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     function pointsTotalAt(uint256 _block) external view returns (uint256) {
         return _getValueAt(_pointsTotal, _block);
+    }
+
+    function dividendsLength() external view returns (uint256) {
+        return dividends.length;
     }
 
     /**
@@ -134,6 +148,23 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         emit Vote(tokenId, msg.sender, userWeight);
     }
 
+    function claimDividend(uint256 tokenId, uint256[] calldata ids) external override {
+        require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
+
+        for (uint256 i; i < ids.length; i++) {
+            uint256 id = ids[i];
+            require(!dividendClaimed[id][tokenId], "NFTG: CLAIMED");
+            dividendClaimed[id][tokenId] = true;
+
+            Dividend memory dividend = dividends[id];
+            uint256 amount = (dividend.amount * _getValueAt(_pointsSum[tokenId], dividend.blockNumber)) /
+                dividend.pointsTotal;
+            _transferTokens(dividend.token, msg.sender, amount);
+
+            emit ClaimDividend(tokenId, id, msg.sender, dividend.token, amount);
+        }
+    }
+
     /**
      * @dev `_getValueAt` retrieves the number of tokens at a given block number
      * @param checkpoints The history of values being queried
@@ -178,15 +209,17 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         }
     }
 
-    function _settleETH(address to, uint256 amount) internal override {
-        // TODO
-    }
-
     function _settle(
         address token,
         address to,
         uint256 amount
     ) internal override {
-        // TODO
+        uint256 fee = (amount * INFTGaugeFactory(factory).fee()) / 10000;
+        uint256 ptTotal = _pointsTotal[_pointsTotal.length - 1].value;
+        dividends.push(Dividend(uint128(block.timestamp), uint128(fee), token, ptTotal));
+
+        emit CreateDividend(token, fee);
+
+        _transferTokens(token, to, amount - fee);
     }
 }

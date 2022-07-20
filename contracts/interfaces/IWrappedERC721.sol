@@ -16,7 +16,7 @@ interface IWrappedERC721 is IERC165, IERC721, IERC721Metadata {
 
     function tokenURIRenderer() external view returns (address);
 
-    function admin() external view returns (address);
+    function factory() external view returns (address);
 
     function sales(uint256 tokenId, address owner)
         external

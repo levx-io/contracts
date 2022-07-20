@@ -40,7 +40,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
     address public override nftContract;
     address public override tokenURIRenderer;
-    address public override admin;
+    address public override factory;
 
     mapping(uint256 => mapping(address => Order)) public override sales;
     mapping(uint256 => mapping(address => Bid_)) public override currentBids;
@@ -52,7 +52,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     function __WrappedERC721_init(address _nftContract, address _tokenURIRenderer) internal initializer {
         nftContract = _nftContract;
         tokenURIRenderer = _tokenURIRenderer;
-        admin = msg.sender;
+        factory = msg.sender;
 
         string memory name;
         string memory symbol;
@@ -120,7 +120,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         require(block.timestamp < deadline, "WERC721: INVALID_DEADLINE");
         require(ownerOf(tokenId) == msg.sender, "WERC721: FORBIDDEN");
         require(
-            currency == address(0) || INFTGaugeFactory(admin).tokenWhitelisted(currency),
+            currency == address(0) || INFTGaugeFactory(factory).tokenWhitelisted(currency),
             "WERC721: INVALID_CURRENCY"
         );
 
@@ -146,7 +146,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         address currency = _buy(tokenId, owner, msg.value, sales[tokenId][owner]);
         require(currency == address(0), "WERC721: ETH_UNACCEPTABLE");
 
-        _settleETH(owner, msg.value);
+        _settle(address(0), owner, msg.value);
     }
 
     function buy(
@@ -157,7 +157,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         address currency = _buy(tokenId, owner, price, sales[tokenId][owner]);
         require(currency != address(0), "WERC721: ONLY_ETH_ACCEPTABLE");
 
-        INFTGaugeFactory(admin).executePayment(currency, msg.sender, price);
+        INFTGaugeFactory(factory).executePayment(currency, msg.sender, price);
 
         _settle(currency, owner, price);
     }
@@ -192,7 +192,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         address currency = _bid(tokenId, owner, price, sales[tokenId][owner]);
         require(currency != address(0), "WERC721: ONLY_ETH_ACCEPTABLE");
 
-        INFTGaugeFactory(admin).executePayment(currency, msg.sender, price);
+        INFTGaugeFactory(factory).executePayment(currency, msg.sender, price);
     }
 
     function _bid(
@@ -235,11 +235,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
         _transfer(owner, msg.sender, tokenId);
 
-        if (sale.currency == address(0)) {
-            _settleETH(owner, sale.price);
-        } else {
-            _settle(sale.currency, owner, sale.price);
-        }
+        _settle(sale.currency, owner, sale.price);
 
         emit Claim(tokenId, owner, msg.sender, sale.price, sale.currency);
     }
@@ -256,7 +252,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     ) external override {
         _makeOffer(tokenId, price, currency, deadline);
 
-        INFTGaugeFactory(admin).executePayment(currency, msg.sender, price);
+        INFTGaugeFactory(factory).executePayment(currency, msg.sender, price);
     }
 
     function _makeOffer(
@@ -297,11 +293,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
         delete offers[tokenId][msg.sender][maker];
 
-        if (offer.currency == address(0)) {
-            _settleETH(msg.sender, offer.price);
-        } else {
-            _settle(offer.currency, msg.sender, offer.price);
-        }
+        _settle(offer.currency, msg.sender, offer.price);
 
         emit AcceptOffer(tokenId, msg.sender, maker, offer.price, offer.currency, offer.deadline);
     }
@@ -318,8 +310,6 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
             IERC20(token).safeTransfer(to, amount);
         }
     }
-
-    function _settleETH(address to, uint256 amount) internal virtual;
 
     function _settle(
         address token,
