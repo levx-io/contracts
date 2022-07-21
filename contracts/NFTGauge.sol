@@ -22,6 +22,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     address public override controller;
     address public override ve;
 
+    mapping(uint256 => uint256) public override ratios;
+
     mapping(uint256 => mapping(address => Checkpoint[])) internal _points;
     mapping(uint256 => Checkpoint[]) internal _pointsSum;
     Checkpoint[] internal _pointsTotal;
@@ -75,39 +77,50 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     /**
      * @notice Mint a wrapped NFT
-     * @param to The owner of the newly minted wrapped NFT
      * @param tokenId Token Id to deposit
+     * @param ratio Revenue split ratio for the voters in bps (units of 0.01%)
+     * @param to The owner of the newly minted wrapped NFT
      */
-    function wrap(uint256 tokenId, address to) external override {
-        wrap(tokenId, to, 0);
+    function wrap(
+        uint256 tokenId,
+        uint256 ratio,
+        address to
+    ) external override {
+        wrap(tokenId, ratio, to, 0);
     }
 
     /**
      * @notice Mint a wrapped NFT and commit gauge voting to this tokenId
-     * @param to The owner of the newly minted wrapped NFT
      * @param tokenId Token Id to deposit
+     * @param ratio Revenue split ratio for the voters in bps (units of 0.01%)
+     * @param to The owner of the newly minted wrapped NFT
      * @param userWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
      */
     function wrap(
         uint256 tokenId,
+        uint256 ratio,
         address to,
         uint256 userWeight
     ) public override {
+        require(ratio <= 10000, "NFTG: INVALID_RATIO");
+
+        ratios[tokenId] = ratio;
+
         _mint(to, tokenId);
-        IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
 
         vote(tokenId, userWeight);
 
         emit Wrap(tokenId, to);
+
+        IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
     }
 
     function unwrap(uint256 tokenId, address to) public override {
         require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
 
-        _cancelIfListed(tokenId, msg.sender);
+        ratios[tokenId] = 0;
 
         _burn(tokenId);
-        IERC721(nftContract).safeTransferFrom(address(this), to, tokenId);
 
         Checkpoint[] storage checkpointsSum = _pointsSum[tokenId];
         uint256 sum = checkpointsSum[checkpointsSum.length - 1].value;
@@ -115,6 +128,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         _updateValueAtNow(_pointsTotal, _pointsTotal[_pointsTotal.length - 1].value - sum);
 
         emit Unwrap(tokenId, to);
+
+        IERC721(nftContract).safeTransferFrom(address(this), to, tokenId);
     }
 
     function vote(uint256 tokenId, uint256 userWeight) public override {
@@ -220,6 +235,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         emit CreateDividend(token, fee);
 
+        // TODO: split revenue
         _transferTokens(token, to, amount - fee);
     }
 }

@@ -44,7 +44,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
     mapping(uint256 => mapping(address => Order)) public override sales;
     mapping(uint256 => mapping(address => Bid_)) public override currentBids;
-    mapping(uint256 => mapping(address => mapping(address => Order))) public override offers;
+    mapping(uint256 => mapping(address => mapping(address => Order))) public override offers; // TODO: with or without taker?
 
     mapping(uint256 => uint256) public nonces;
     mapping(address => uint256) public noncesForAll;
@@ -318,19 +318,13 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     ) internal virtual;
 
     function _beforeTokenTransfer(
-        address,
+        address from,
         address,
         uint256 tokenId
     ) internal override {
-        _cancelIfListed(tokenId, ownerOf(tokenId));
-    }
-
-    function _cancelIfListed(uint256 tokenId, address owner) internal {
-        Order storage sale = sales[tokenId][owner];
-        uint256 _deadline = sale.deadline;
-        if (_deadline > 0 && block.timestamp <= _deadline) {
-            delete sales[tokenId][owner];
-            delete currentBids[tokenId][owner];
+        if (from != address(0)) {
+            delete sales[tokenId][from];
+            delete currentBids[tokenId][from];
         }
     }
 
