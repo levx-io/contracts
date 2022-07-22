@@ -6,19 +6,31 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 import "./base/CloneFactory.sol";
 import "./interfaces/INFTGaugeFactory.sol";
+import "./libraries/Tokens.sol";
 import "./NFTGauge.sol";
 
 contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     using SafeERC20 for IERC20;
 
+    struct Dividend {
+        uint128 blockNumber;
+        uint128 amount;
+        address token;
+        uint256 total;
+    }
+
     address public immutable override tokenURIRenderer;
     address public immutable override controller;
+    address public immutable override ve;
     address internal immutable _target;
 
     uint256 public override fee;
     mapping(address => bool) public override tokenWhitelisted;
     mapping(address => address) public override gauges;
     mapping(address => bool) public override isGauge;
+
+    Dividend[] public override dividends;
+    mapping(uint256 => mapping(address => bool)) public override dividendsClaimed;
 
     constructor(
         address _tokenURIRenderer,
@@ -27,6 +39,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     ) {
         tokenURIRenderer = _tokenURIRenderer;
         controller = _controller;
+        ve = IGaugeController(_controller).votingEscrow();
         fee = _fee;
 
         emit UpdateFee(_fee);
@@ -49,7 +62,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     }
 
     function createNFTGauge(address nftContract) external override returns (address gauge) {
-        require(gauges[nftContract] == address(0), "NFTGA: GAUGE_CREATED");
+        require(gauges[nftContract] == address(0), "NFTGF: GAUGE_CREATED");
 
         gauge = _createClone(_target);
         INFTGauge(gauge).initialize(nftContract, tokenURIRenderer, controller);
@@ -65,9 +78,33 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         address from,
         uint256 amount
     ) external override {
-        require(isGauge[msg.sender], "NFTGA: FORBIDDEN");
-        require(tokenWhitelisted[token], "NFTGA: TOKEN_NOT_WHITELIST");
+        require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
+        require(tokenWhitelisted[token], "NFTGF: TOKEN_NOT_WHITELIST");
 
         IERC20(token).safeTransferFrom(from, msg.sender, amount);
+    }
+
+    function addDividend(address token, uint256 amount) external override returns (uint256 amountFee) {
+        require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
+
+        amountFee = amount * fee;
+        dividends.push(Dividend(uint128(block.timestamp), uint128(amountFee), token, IVotingEscrow(ve).totalSupply()));
+        emit AddDividend(token, amount);
+    }
+
+    function claimDividends(uint256[] calldata ids) external override {
+        for (uint256 i; i < ids.length; i++) {
+            uint256 id = ids[i];
+            require(!dividendsClaimed[id][msg.sender], "NFTGF: CLAIMED");
+            dividendsClaimed[id][msg.sender] = true;
+
+            Dividend memory dividend = dividends[id];
+            uint256 amount = (dividend.amount * IVotingEscrow(ve).balanceOfAt(msg.sender, dividend.blockNumber)) /
+                dividend.total;
+            require(amount > 0, "NFTGF: INSUFFICIENT_AMOUNT");
+            Tokens.transfer(dividend.token, msg.sender, amount);
+
+            emit ClaimDividend(id, msg.sender, dividend.token, amount);
+        }
     }
 }

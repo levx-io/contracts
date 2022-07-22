@@ -4,6 +4,12 @@ pragma solidity ^0.8.0;
 import "./IWrappedERC721.sol";
 
 interface INFTGauge is IWrappedERC721 {
+    event Wrap(uint256 indexed tokenId, address indexed to);
+    event Unwrap(uint256 indexed tokenId, address indexed to);
+    event Vote(uint256 indexed tokenId, address indexed user, uint256 weight);
+    event AddDividend(uint256 indexed tokenId, address indexed token, uint256 amount);
+    event ClaimDividend(uint256 indexed dividendId, address indexed to, address indexed token, uint256 amount);
+
     function initialize(
         address _nftContract,
         address _tokenURIRenderer,
@@ -14,19 +20,20 @@ interface INFTGauge is IWrappedERC721 {
 
     function ve() external view returns (address);
 
-    function ratios(uint256 tokenId) external view returns (uint256);
+    function dividendRatios(uint256 tokenId) external view returns (uint256);
 
     function dividends(uint256 id)
         external
         view
         returns (
+            uint256 tokenId,
             uint128 blockNumber,
             uint128 amount,
             address token,
-            uint256 pointsTotal
+            uint256 total
         );
 
-    function dividendClaimed(uint256 id, uint256 tokenId) external view returns (bool);
+    function dividendsClaimed(uint256 id, address user) external view returns (bool);
 
     function points(uint256 tokenId, address user) external view returns (uint256);
 
@@ -61,11 +68,5 @@ interface INFTGauge is IWrappedERC721 {
 
     function vote(uint256 tokenId, uint256 userWeight) external;
 
-    function claimDividend(uint256 tokenId, uint256[] calldata ids) external;
-
-    event Wrap(uint256 indexed tokenId, address indexed to);
-    event Unwrap(uint256 indexed tokenId, address indexed to);
-    event Vote(uint256 indexed tokenId, address indexed user, uint256 weight);
-    event ClaimDividend(uint256 indexed tokenId, uint256 indexed dividendId, address to, address token, uint256 amount);
-    event CreateDividend(address token, uint256 amount);
+    function claimDividends(uint256[] calldata ids) external;
 }

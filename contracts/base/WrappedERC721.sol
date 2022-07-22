@@ -2,7 +2,6 @@
 pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
 import "../base/ERC721Initializable.sol";
@@ -10,9 +9,9 @@ import "../interfaces/IWrappedERC721.sol";
 import "../interfaces/ITokenURIRenderer.sol";
 import "../interfaces/INFTGaugeFactory.sol";
 import "../libraries/Signature.sol";
+import "../libraries/Tokens.sol";
 
 abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappedERC721 {
-    using SafeERC20 for IERC20;
     using Strings for uint256;
 
     struct Order {
@@ -146,7 +145,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         address currency = _buy(tokenId, owner, msg.value, sales[tokenId][owner]);
         require(currency == address(0), "WERC721: ETH_UNACCEPTABLE");
 
-        _settle(address(0), owner, msg.value);
+        _settle(tokenId, address(0), owner, msg.value);
     }
 
     function buy(
@@ -159,7 +158,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
         INFTGaugeFactory(factory).executePayment(currency, msg.sender, price);
 
-        _settle(currency, owner, price);
+        _settle(tokenId, currency, owner, price);
     }
 
     function _buy(
@@ -173,7 +172,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         require(sale.price == price, "WERC721: INVALID_PRICE");
         require(!sale.auction, "WERC721: BID_REQUIRED");
 
-        _transfer(owner, msg.sender, tokenId);
+        Tokens.transfer(owner, msg.sender, tokenId);
 
         currency = sale.currency;
         emit Buy(tokenId, owner, msg.sender, price, currency);
@@ -217,7 +216,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
                 "WERC721: EXPIRED"
             );
 
-            _transferTokens(currency, prevBid.bidder, prevBid.price);
+            Tokens.transfer(currency, prevBid.bidder, prevBid.price);
         }
         currentBids[tokenId][owner] = Bid_(price, msg.sender, uint64(block.timestamp));
 
@@ -233,9 +232,9 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         require(currentBid.bidder == msg.sender, "WERC721: FORBIDDEN");
         require(currentBid.timestamp + 10 minutes < block.timestamp, "WERC721: EXPIRED");
 
-        _transfer(owner, msg.sender, tokenId);
+        Tokens.transfer(owner, msg.sender, tokenId);
 
-        _settle(sale.currency, owner, sale.price);
+        _settle(tokenId, sale.currency, owner, sale.price);
 
         emit Claim(tokenId, owner, msg.sender, sale.price, sale.currency);
     }
@@ -279,7 +278,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
         emit WithdrawOffer(tokenId, taker, msg.sender);
 
-        _transferTokens(offer.currency, msg.sender, offer.price);
+        Tokens.transfer(offer.currency, msg.sender, offer.price);
     }
 
     function acceptOffer(uint256 tokenId, address maker) external override nonReentrant {
@@ -289,30 +288,18 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         require(offer.deadline > 0, "WERC721: INVALID_OFFER");
         require(block.timestamp <= offer.deadline, "WERC721: EXPIRED");
 
-        _transfer(msg.sender, maker, tokenId);
+        Tokens.transfer(msg.sender, maker, tokenId);
 
         delete offers[tokenId][msg.sender][maker];
 
-        _settle(offer.currency, msg.sender, offer.price);
+        _settle(tokenId, offer.currency, msg.sender, offer.price);
 
         emit AcceptOffer(tokenId, msg.sender, maker, offer.price, offer.currency, offer.deadline);
     }
 
-    function _transferTokens(
-        address token,
-        address to,
-        uint256 amount
-    ) internal {
-        if (token == address(0)) {
-            (bool success, ) = payable(to).call{value: amount}("");
-            require(success, "WERC721: FAILED_TO_TRANSFER_ETH");
-        } else {
-            IERC20(token).safeTransfer(to, amount);
-        }
-    }
-
     function _settle(
-        address token,
+        uint256 tokenId,
+        address currency,
         address to,
         uint256 amount
     ) internal virtual;

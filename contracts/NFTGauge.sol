@@ -5,6 +5,7 @@ import "./base/WrappedERC721.sol";
 import "./interfaces/INFTGauge.sol";
 import "./interfaces/IGaugeController.sol";
 import "./interfaces/IVotingEscrow.sol";
+import "./libraries/Tokens.sol";
 
 contract NFTGauge is WrappedERC721, INFTGauge {
     struct Checkpoint {
@@ -13,23 +14,23 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     struct Dividend {
+        uint256 tokenId;
         uint128 blockNumber;
         uint128 amount;
         address token;
-        uint256 pointsTotal;
+        uint256 total;
     }
 
     address public override controller;
     address public override ve;
 
-    mapping(uint256 => uint256) public override ratios;
+    mapping(uint256 => uint256) public override dividendRatios;
+    Dividend[] public override dividends;
+    mapping(uint256 => mapping(address => bool)) public override dividendsClaimed;
 
     mapping(uint256 => mapping(address => Checkpoint[])) internal _points;
     mapping(uint256 => Checkpoint[]) internal _pointsSum;
     Checkpoint[] internal _pointsTotal;
-
-    Dividend[] public override dividends;
-    mapping(uint256 => mapping(uint256 => bool)) public override dividendClaimed;
 
     function initialize(
         address _nftContract,
@@ -78,33 +79,33 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     /**
      * @notice Mint a wrapped NFT
      * @param tokenId Token Id to deposit
-     * @param ratio Revenue split ratio for the voters in bps (units of 0.01%)
+     * @param dividendRatio Dividend ratio for the voters in bps (units of 0.01%)
      * @param to The owner of the newly minted wrapped NFT
      */
     function wrap(
         uint256 tokenId,
-        uint256 ratio,
+        uint256 dividendRatio,
         address to
     ) external override {
-        wrap(tokenId, ratio, to, 0);
+        wrap(tokenId, dividendRatio, to, 0);
     }
 
     /**
      * @notice Mint a wrapped NFT and commit gauge voting to this tokenId
      * @param tokenId Token Id to deposit
-     * @param ratio Revenue split ratio for the voters in bps (units of 0.01%)
+     * @param dividendRatio Dividend ratio for the voters in bps (units of 0.01%)
      * @param to The owner of the newly minted wrapped NFT
      * @param userWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
      */
     function wrap(
         uint256 tokenId,
-        uint256 ratio,
+        uint256 dividendRatio,
         address to,
         uint256 userWeight
     ) public override {
-        require(ratio <= 10000, "NFTG: INVALID_RATIO");
+        require(dividendRatio <= 10000, "NFTG: INVALID_RATIO");
 
-        ratios[tokenId] = ratio;
+        dividendRatios[tokenId] = dividendRatio;
 
         _mint(to, tokenId);
 
@@ -118,7 +119,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     function unwrap(uint256 tokenId, address to) public override {
         require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
 
-        ratios[tokenId] = 0;
+        dividendRatios[tokenId] = 0;
 
         _burn(tokenId);
 
@@ -163,20 +164,19 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         emit Vote(tokenId, msg.sender, userWeight);
     }
 
-    function claimDividend(uint256 tokenId, uint256[] calldata ids) external override {
-        require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
-
+    function claimDividends(uint256[] calldata ids) external override {
         for (uint256 i; i < ids.length; i++) {
             uint256 id = ids[i];
-            require(!dividendClaimed[id][tokenId], "NFTG: CLAIMED");
-            dividendClaimed[id][tokenId] = true;
+            require(!dividendsClaimed[id][msg.sender], "NFTG: CLAIMED");
+            dividendsClaimed[id][msg.sender] = true;
 
             Dividend memory dividend = dividends[id];
-            uint256 amount = (dividend.amount * _getValueAt(_pointsSum[tokenId], dividend.blockNumber)) /
-                dividend.pointsTotal;
-            _transferTokens(dividend.token, msg.sender, amount);
+            uint256 amount = (dividend.amount *
+                _getValueAt(_points[dividend.tokenId][msg.sender], dividend.blockNumber)) / dividend.total;
+            require(amount > 0, "NFTG: INSUFFICIENT_AMOUNT");
+            Tokens.transfer(dividend.token, msg.sender, amount);
 
-            emit ClaimDividend(tokenId, id, msg.sender, dividend.token, amount);
+            emit ClaimDividend(id, msg.sender, dividend.token, amount);
         }
     }
 
@@ -225,17 +225,25 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     function _settle(
-        address token,
+        uint256 tokenId,
+        address currency,
         address to,
         uint256 amount
     ) internal override {
-        uint256 fee = (amount * INFTGaugeFactory(factory).fee()) / 10000;
-        uint256 ptTotal = _pointsTotal[_pointsTotal.length - 1].value;
-        dividends.push(Dividend(uint128(block.timestamp), uint128(fee), token, ptTotal));
+        uint256 fee = INFTGaugeFactory(factory).addDividend(currency, amount);
+        uint256 dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
+        Checkpoint[] storage checkpoints = _pointsSum[tokenId];
+        dividends.push(
+            Dividend(
+                tokenId,
+                uint128(block.timestamp),
+                uint128(dividend),
+                currency,
+                checkpoints[checkpoints.length - 1].value
+            )
+        );
+        emit AddDividend(tokenId, currency, dividend);
 
-        emit CreateDividend(token, fee);
-
-        // TODO: split revenue
-        _transferTokens(token, to, amount - fee);
+        Tokens.transfer(currency, to, amount - fee - dividend);
     }
 }
