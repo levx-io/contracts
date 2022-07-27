@@ -43,7 +43,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
     mapping(uint256 => mapping(address => Order)) public override sales;
     mapping(uint256 => mapping(address => Bid_)) public override currentBids;
-    mapping(uint256 => mapping(address => mapping(address => Order))) public override offers; // TODO: with or without taker?
+    mapping(uint256 => mapping(address => Order)) public override offers;
 
     mapping(uint256 => uint256) public nonces;
     mapping(address => uint256) public noncesForAll;
@@ -264,19 +264,18 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         require(price > 0, "WERC721: INVALID_PRICE");
         require(block.timestamp < uint256(deadline), "WERC721: INVALID_DEADLINE");
 
-        address taker = ownerOf(tokenId);
-        offers[tokenId][taker][msg.sender] = Order(price, currency, deadline, false);
+        offers[tokenId][msg.sender] = Order(price, currency, deadline, false);
 
-        emit MakeOffer(tokenId, taker, msg.sender, price, currency, uint256(deadline));
+        emit MakeOffer(tokenId, msg.sender, price, currency, uint256(deadline));
     }
 
-    function withdrawOffer(uint256 tokenId, address taker) external override {
-        Order memory offer = offers[tokenId][taker][msg.sender];
+    function withdrawOffer(uint256 tokenId) external override {
+        Order memory offer = offers[tokenId][msg.sender];
         require(offer.deadline > 0, "WERC721: INVALID_OFFER");
 
-        delete offers[tokenId][taker][msg.sender];
+        delete offers[tokenId][msg.sender];
 
-        emit WithdrawOffer(tokenId, taker, msg.sender);
+        emit WithdrawOffer(tokenId, msg.sender);
 
         Tokens.transfer(offer.currency, msg.sender, offer.price);
     }
@@ -284,17 +283,17 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     function acceptOffer(uint256 tokenId, address maker) external override nonReentrant {
         require(ownerOf(tokenId) == msg.sender, "WERC721: FORBIDDEN");
 
-        Order memory offer = offers[tokenId][msg.sender][maker];
+        Order memory offer = offers[tokenId][maker];
         require(offer.deadline > 0, "WERC721: INVALID_OFFER");
         require(block.timestamp <= offer.deadline, "WERC721: EXPIRED");
 
         Tokens.transfer(msg.sender, maker, tokenId);
 
-        delete offers[tokenId][msg.sender][maker];
+        delete offers[tokenId][maker];
 
         _settle(tokenId, offer.currency, msg.sender, offer.price);
 
-        emit AcceptOffer(tokenId, msg.sender, maker, offer.price, offer.currency, offer.deadline);
+        emit AcceptOffer(tokenId, maker, msg.sender, offer.price, offer.currency, offer.deadline);
     }
 
     function _settle(

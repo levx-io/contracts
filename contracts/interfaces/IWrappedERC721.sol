@@ -37,11 +37,7 @@ interface IWrappedERC721 is IERC165, IERC721, IERC721Metadata {
             uint64 timestamp
         );
 
-    function offers(
-        uint256 tokenId,
-        address taker,
-        address maker
-    )
+    function offers(uint256 tokenId, address maker)
         external
         view
         returns (
@@ -88,7 +84,7 @@ interface IWrappedERC721 is IERC165, IERC721, IERC721Metadata {
         uint64 deadline
     ) external;
 
-    function withdrawOffer(uint256 tokenId, address taker) external;
+    function withdrawOffer(uint256 tokenId) external;
 
     function acceptOffer(uint256 tokenId, address maker) external;
 
@@ -119,19 +115,12 @@ interface IWrappedERC721 is IERC165, IERC721, IERC721Metadata {
         bool indexed auction
     );
     event CancelListing(uint256 indexed tokenId, address indexed owner);
-    event MakeOffer(
-        uint256 indexed tokenId,
-        address indexed taker,
-        address indexed maker,
-        uint256 price,
-        address currency,
-        uint256 deadline
-    );
-    event WithdrawOffer(uint256 indexed tokenId, address indexed taker, address indexed maker);
+    event MakeOffer(uint256 indexed tokenId, address indexed maker, uint256 price, address currency, uint256 deadline);
+    event WithdrawOffer(uint256 indexed tokenId, address indexed maker);
     event AcceptOffer(
         uint256 indexed tokenId,
-        address indexed taker,
         address indexed maker,
+        address indexed taker,
         uint256 price,
         address currency,
         uint256 deadline
