@@ -22,7 +22,9 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     address public immutable override tokenURIRenderer;
     address public immutable override controller;
     address public immutable override ve;
-    address internal immutable _target;
+
+    address public override target;
+    uint256 public override targetVersion;
 
     uint256 public override fee;
     mapping(address => bool) public override tokenWhitelisted;
@@ -46,7 +48,16 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
 
         NFTGauge gauge = new NFTGauge();
         gauge.initialize(address(0), address(0), address(0));
-        _target = address(gauge);
+        target = address(gauge);
+    }
+
+    function upgradeTarget(address _target) external override onlyOwner {
+        target = _target;
+
+        uint256 version = targetVersion + 1;
+        targetVersion = version;
+
+        emit UpgradeTarget(_target, version);
     }
 
     function whitelistToken(address token) external override onlyOwner {
@@ -64,7 +75,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     function createNFTGauge(address nftContract) external override returns (address gauge) {
         require(gauges[nftContract] == address(0), "NFTGF: GAUGE_CREATED");
 
-        gauge = _createClone(_target);
+        gauge = _createClone(target);
         INFTGauge(gauge).initialize(nftContract, tokenURIRenderer, controller);
 
         gauges[nftContract] = gauge;
