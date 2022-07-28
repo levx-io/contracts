@@ -118,7 +118,6 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     ) external override {
         (int128 value, , uint256 start, uint256 end) = IVotingEscrow(ve).locked(msg.sender);
         require(value > 0, "NFTGF: LOCK_NOT_FOUND");
-        require(block.timestamp < end, "NFTGF: LOCK_EXPIRED");
 
         uint256 i = from;
         uint256 claimed = feesClaimed[token][msg.sender];
