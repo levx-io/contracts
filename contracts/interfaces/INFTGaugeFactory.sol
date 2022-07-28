@@ -6,8 +6,8 @@ interface INFTGaugeFactory {
     event WhitelistToken(address indexed token);
     event CreateNFTGauge(address indexed nftContract, address indexed gauge);
     event UpdateFeeRatio(uint256 feeRatio);
-    event DistributeFee(address indexed token, uint256 indexed id, uint256 amount, uint256 blockNumber);
-    event ClaimFee(address indexed token, uint256 indexed id, uint256 amount, address indexed to);
+    event DistributeFees(address indexed token, uint256 indexed id, uint256 amount);
+    event ClaimFees(address indexed token, uint256 indexed id, uint256 amount, address indexed to);
 
     function tokenURIRenderer() external view returns (address);
 
@@ -27,13 +27,9 @@ interface INFTGaugeFactory {
 
     function isGauge(address addr) external view returns (bool);
 
-    function fees(address token, uint256 id) external view returns (uint128 blockNumber, uint128 amountPerShare);
+    function fees(address token, uint256 id) external view returns (uint64 timestamp, uint192 amountPerShare);
 
-    function feesClaimed(
-        address token,
-        uint256 id,
-        address user
-    ) external view returns (bool);
+    function feesClaimed(address token, address user) external view returns (uint256);
 
     function upgradeTarget(address target) external;
 
@@ -49,7 +45,13 @@ interface INFTGaugeFactory {
         uint256 amount
     ) external;
 
-    function distributeFee(address token, uint256 amount) external returns (uint256 amountFee);
+    function distributeFeesETH() external payable returns (uint256 amountFee);
 
-    function claimFees(address token, uint256[] calldata ids) external;
+    function distributeFees(address token, uint256 amount) external returns (uint256 amountFee);
+
+    function claimFees(
+        address token,
+        uint256 from,
+        uint256 to
+    ) external;
 }

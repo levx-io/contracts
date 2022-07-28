@@ -13,8 +13,8 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     using SafeERC20 for IERC20;
 
     struct Fee {
-        uint128 blockNumber;
-        uint128 amountPerShare;
+        uint64 timestamp;
+        uint192 amountPerShare;
     }
 
     address public immutable override tokenURIRenderer;
@@ -30,7 +30,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     mapping(address => bool) public override isGauge;
 
     mapping(address => Fee[]) public override fees;
-    mapping(address => mapping(uint256 => mapping(address => bool))) public override feesClaimed;
+    mapping(address => mapping(address => uint256)) public override feesClaimed;
 
     constructor(
         address _tokenURIRenderer,
@@ -93,28 +93,52 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         IERC20(token).safeTransferFrom(from, msg.sender, amount);
     }
 
-    function distributeFee(address token, uint256 amount) external override returns (uint256 amountFee) {
-        require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
-
-        amountFee = (amount * feeRatio) / 10000;
-        fees[token].push(Fee(uint128(block.number), uint128((amountFee * 1e18) / IVotingEscrow(ve).totalSupply())));
-
-        emit DistributeFee(token, fees[token].length - 1, amountFee, block.number);
+    function distributeFeesETH() external payable override returns (uint256 amountFee) {
+        amountFee = (msg.value * feeRatio) / 10000;
+        _distributeFees(address(0), amountFee);
     }
 
-    function claimFees(address token, uint256[] calldata ids) external override {
-        for (uint256 i; i < ids.length; i++) {
-            uint256 id = ids[i];
-            Fee memory fee = fees[token][id];
+    function distributeFees(address token, uint256 amount) external override returns (uint256 amountFee) {
+        amountFee = (amount * feeRatio) / 10000;
+        _distributeFees(token, amountFee);
+    }
 
-            require(!feesClaimed[token][id][msg.sender], "NFTGF: CLAIMED");
-            feesClaimed[token][id][msg.sender] = true;
+    function _distributeFees(address token, uint256 amount) internal {
+        require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
 
-            uint256 amount = (IVotingEscrow(ve).balanceOfAt(msg.sender, fee.blockNumber) * fee.amountPerShare) / 1e18;
-            require(amount > 0, "NFTGF: INSUFFICIENT_AMOUNT");
-            Tokens.transfer(token, msg.sender, amount);
+        fees[token].push(Fee(uint64(block.timestamp), uint192((amount * 1e18) / IVotingEscrow(ve).totalSupply())));
 
-            emit ClaimFee(token, id, amount, msg.sender);
+        emit DistributeFees(token, fees[token].length - 1, amount);
+    }
+
+    function claimFees(
+        address token,
+        uint256 from,
+        uint256 to
+    ) external override {
+        (int128 value, , uint256 start, uint256 end) = IVotingEscrow(ve).locked(msg.sender);
+        require(value > 0, "NFTGF: LOCK_NOT_FOUND");
+        require(block.timestamp < end, "NFTGF: LOCK_EXPIRED");
+
+        uint256 i = from;
+        uint256 claimed = feesClaimed[token][msg.sender];
+        if (i <= claimed) i = claimed + 1;
+
+        while (i <= to) {
+            Fee memory fee = fees[token][i];
+            require(start <= fee.timestamp, "NFTGF: INVALID_FROM");
+            require(fee.timestamp <= end, "NFTGF: INVALID_TO");
+
+            uint256 amount = (IVotingEscrow(ve).balanceOf(msg.sender, fee.timestamp) * uint256(fee.amountPerShare)) /
+                1e18;
+            if (amount > 0) {
+                Tokens.transfer(token, msg.sender, amount);
+                emit ClaimFees(token, i, amount, msg.sender);
+            }
+            unchecked {
+                ++i;
+            }
         }
+        feesClaimed[token][msg.sender] = to;
     }
 }
