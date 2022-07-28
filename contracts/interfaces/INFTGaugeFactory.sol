@@ -5,9 +5,9 @@ interface INFTGaugeFactory {
     event UpgradeTarget(address target, uint256 indexed version);
     event WhitelistToken(address indexed token);
     event CreateNFTGauge(address indexed nftContract, address indexed gauge);
-    event UpdateFee(uint256 fee);
-    event AddDividend(address indexed token, uint256 amount);
-    event ClaimDividend(uint256 indexed dividendId, address indexed to, address indexed token, uint256 amount);
+    event UpdateFeeRatio(uint256 feeRatio);
+    event DistributeFee(address indexed token, uint256 indexed id, uint256 amount, uint256 blockNumber);
+    event ClaimFee(address indexed token, uint256 indexed id, uint256 amount, address indexed to);
 
     function tokenURIRenderer() external view returns (address);
 
@@ -19,7 +19,7 @@ interface INFTGaugeFactory {
 
     function targetVersion() external view returns (uint256);
 
-    function fee() external view returns (uint256);
+    function feeRatio() external view returns (uint256);
 
     function tokenWhitelisted(address token) external view returns (bool);
 
@@ -27,23 +27,19 @@ interface INFTGaugeFactory {
 
     function isGauge(address addr) external view returns (bool);
 
-    function dividends(uint256 id)
-        external
-        view
-        returns (
-            uint128 blockNumber,
-            uint128 amount,
-            address currency,
-            uint256 total
-        );
+    function fees(address token, uint256 id) external view returns (uint128 blockNumber, uint128 amountPerShare);
 
-    function dividendsClaimed(uint256 id, address user) external view returns (bool);
+    function feesClaimed(
+        address token,
+        uint256 id,
+        address user
+    ) external view returns (bool);
 
     function upgradeTarget(address target) external;
 
     function whitelistToken(address token) external;
 
-    function updateFee(uint256 fee) external;
+    function updateFeeRatio(uint256 feeRatio) external;
 
     function createNFTGauge(address nftContract) external returns (address gauge);
 
@@ -53,7 +49,7 @@ interface INFTGaugeFactory {
         uint256 amount
     ) external;
 
-    function addDividend(address token, uint256 amount) external returns (uint256 amountFee);
+    function distributeFee(address token, uint256 amount) external returns (uint256 amountFee);
 
-    function claimDividends(uint256[] calldata ids) external;
+    function claimFees(address token, uint256[] calldata ids) external;
 }

@@ -12,11 +12,9 @@ import "./NFTGauge.sol";
 contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     using SafeERC20 for IERC20;
 
-    struct Dividend {
+    struct Fee {
         uint128 blockNumber;
-        uint128 amount;
-        address token;
-        uint256 total;
+        uint128 amountPerShare;
     }
 
     address public immutable override tokenURIRenderer;
@@ -26,25 +24,25 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     address public override target;
     uint256 public override targetVersion;
 
-    uint256 public override fee;
+    uint256 public override feeRatio;
     mapping(address => bool) public override tokenWhitelisted;
     mapping(address => address) public override gauges;
     mapping(address => bool) public override isGauge;
 
-    Dividend[] public override dividends;
-    mapping(uint256 => mapping(address => bool)) public override dividendsClaimed;
+    mapping(address => Fee[]) public override fees;
+    mapping(address => mapping(uint256 => mapping(address => bool))) public override feesClaimed;
 
     constructor(
         address _tokenURIRenderer,
         address _controller,
-        uint256 _fee
+        uint256 _feeRatio
     ) {
         tokenURIRenderer = _tokenURIRenderer;
         controller = _controller;
         ve = IGaugeController(_controller).votingEscrow();
-        fee = _fee;
+        feeRatio = _feeRatio;
 
-        emit UpdateFee(_fee);
+        emit UpdateFeeRatio(_feeRatio);
 
         NFTGauge gauge = new NFTGauge();
         gauge.initialize(address(0), address(0), address(0));
@@ -66,10 +64,10 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         emit WhitelistToken(token);
     }
 
-    function updateFee(uint256 _fee) external override onlyOwner {
-        fee = _fee;
+    function updateFeeRatio(uint256 _feeRatio) external override onlyOwner {
+        feeRatio = _feeRatio;
 
-        emit UpdateFee(_fee);
+        emit UpdateFeeRatio(_feeRatio);
     }
 
     function createNFTGauge(address nftContract) external override returns (address gauge) {
@@ -95,27 +93,28 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         IERC20(token).safeTransferFrom(from, msg.sender, amount);
     }
 
-    function addDividend(address token, uint256 amount) external override returns (uint256 amountFee) {
+    function distributeFee(address token, uint256 amount) external override returns (uint256 amountFee) {
         require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
 
-        amountFee = amount * fee;
-        dividends.push(Dividend(uint128(block.timestamp), uint128(amountFee), token, IVotingEscrow(ve).totalSupply()));
-        emit AddDividend(token, amount);
+        amountFee = (amount * feeRatio) / 10000;
+        fees[token].push(Fee(uint128(block.number), uint128((amountFee * 1e18) / IVotingEscrow(ve).totalSupply())));
+
+        emit DistributeFee(token, fees[token].length - 1, amountFee, block.number);
     }
 
-    function claimDividends(uint256[] calldata ids) external override {
+    function claimFees(address token, uint256[] calldata ids) external override {
         for (uint256 i; i < ids.length; i++) {
             uint256 id = ids[i];
-            require(!dividendsClaimed[id][msg.sender], "NFTGF: CLAIMED");
-            dividendsClaimed[id][msg.sender] = true;
+            Fee memory fee = fees[token][id];
 
-            Dividend memory dividend = dividends[id];
-            uint256 amount = (dividend.amount * IVotingEscrow(ve).balanceOfAt(msg.sender, dividend.blockNumber)) /
-                dividend.total;
+            require(!feesClaimed[token][id][msg.sender], "NFTGF: CLAIMED");
+            feesClaimed[token][id][msg.sender] = true;
+
+            uint256 amount = (IVotingEscrow(ve).balanceOfAt(msg.sender, fee.blockNumber) * fee.amountPerShare) / 1e18;
             require(amount > 0, "NFTGF: INSUFFICIENT_AMOUNT");
-            Tokens.transfer(dividend.token, msg.sender, amount);
+            Tokens.transfer(token, msg.sender, amount);
 
-            emit ClaimDividend(id, msg.sender, dividend.token, amount);
+            emit ClaimFee(token, id, amount, msg.sender);
         }
     }
 }

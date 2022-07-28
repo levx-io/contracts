@@ -230,7 +230,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         address to,
         uint256 amount
     ) internal override {
-        uint256 fee = INFTGaugeFactory(factory).addDividend(currency, amount);
+        uint256 fee = INFTGaugeFactory(factory).distributeFee(currency, amount);
         uint256 dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
         Checkpoint[] storage checkpoints = _pointsSum[tokenId];
         dividends.push(
