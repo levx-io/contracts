@@ -116,28 +116,26 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         uint256 from,
         uint256 to
     ) external override {
-        (int128 value, , uint256 start, uint256 end) = IVotingEscrow(ve).locked(msg.sender);
+        require(from > feesClaimed[token][msg.sender], "NFTGF: INVALID_FROM");
+
+        (int128 value, , uint256 start, ) = IVotingEscrow(ve).locked(msg.sender);
         require(value > 0, "NFTGF: LOCK_NOT_FOUND");
+        require(start <= fees[token][from].timestamp, "NFTGF: FROM_TIMESTAMP_TOO_EARLY");
 
-        uint256 i = from;
-        uint256 claimed = feesClaimed[token][msg.sender];
-        if (i <= claimed) i = claimed + 1;
-
-        while (i <= to) {
+        uint256 amount;
+        for (uint256 i = from; i <= to; ) {
             Fee memory fee = fees[token][i];
-            require(start <= fee.timestamp, "NFTGF: INVALID_FROM");
-            require(fee.timestamp <= end, "NFTGF: INVALID_TO");
-
-            uint256 amount = (IVotingEscrow(ve).balanceOf(msg.sender, fee.timestamp) * uint256(fee.amountPerShare)) /
-                1e18;
-            if (amount > 0) {
-                Tokens.transfer(token, msg.sender, amount);
-                emit ClaimFees(token, i, amount, msg.sender);
+            uint256 balance = IVotingEscrow(ve).balanceOf(msg.sender, fee.timestamp);
+            if (balance > 0) {
+                amount += (balance * uint256(fee.amountPerShare)) / 1e18;
             }
             unchecked {
                 ++i;
             }
         }
         feesClaimed[token][msg.sender] = to;
+
+        emit ClaimFees(token, amount, msg.sender);
+        Tokens.transfer(token, msg.sender, amount);
     }
 }

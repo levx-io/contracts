@@ -7,7 +7,7 @@ interface INFTGaugeFactory {
     event CreateNFTGauge(address indexed nftContract, address indexed gauge);
     event UpdateFeeRatio(uint256 feeRatio);
     event DistributeFees(address indexed token, uint256 indexed id, uint256 amount);
-    event ClaimFees(address indexed token, uint256 indexed id, uint256 amount, address indexed to);
+    event ClaimFees(address indexed token, uint256 amount, address indexed to);
 
     function tokenURIRenderer() external view returns (address);
 
