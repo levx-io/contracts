@@ -49,6 +49,10 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         target = address(gauge);
     }
 
+    function feesLength(address token) external view override returns (uint256) {
+        return fees[token].length;
+    }
+
     function upgradeTarget(address _target) external override onlyOwner {
         target = _target;
 

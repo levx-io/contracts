@@ -31,6 +31,8 @@ interface INFTGaugeFactory {
 
     function feesClaimed(address token, address user) external view returns (uint256);
 
+    function feesLength(address token) external view returns (uint256);
+
     function upgradeTarget(address target) external;
 
     function whitelistToken(address token) external;
