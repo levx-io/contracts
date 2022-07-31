@@ -15,18 +15,16 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     struct Dividend {
         uint256 tokenId;
-        uint128 blockNumber;
-        uint128 amount;
-        address token;
-        uint256 total;
+        uint64 blockNumber;
+        uint192 amountPerShare;
     }
 
     address public override controller;
     address public override ve;
 
     mapping(uint256 => uint256) public override dividendRatios;
-    Dividend[] public override dividends;
-    mapping(uint256 => mapping(address => bool)) public override dividendsClaimed;
+    mapping(address => Dividend[]) public override dividends;
+    mapping(address => mapping(uint256 => mapping(address => bool))) public override dividendsClaimed;
 
     mapping(uint256 => mapping(address => Checkpoint[])) internal _points;
     mapping(uint256 => Checkpoint[]) internal _pointsSum;
@@ -43,7 +41,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         ve = IGaugeController(_controller).votingEscrow();
     }
 
-    function points(uint256 tokenId, address user) external view returns (uint256) {
+    function points(uint256 tokenId, address user) external view override returns (uint256) {
         return _exists(tokenId) ? _getValueAt(_points[tokenId][user], block.timestamp) : 0;
     }
 
@@ -51,29 +49,29 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 tokenId,
         address user,
         uint256 _block
-    ) external view returns (uint256) {
+    ) external view override returns (uint256) {
         uint256 sum = _getValueAt(_pointsSum[tokenId], _block);
         return sum > 0 ? _getValueAt(_points[tokenId][user], _block) : 0;
     }
 
-    function pointsSum(uint256 tokenId) external view returns (uint256) {
+    function pointsSum(uint256 tokenId) external view override returns (uint256) {
         return _getValueAt(_pointsSum[tokenId], block.timestamp);
     }
 
-    function pointsSumAt(uint256 tokenId, uint256 _block) external view returns (uint256) {
+    function pointsSumAt(uint256 tokenId, uint256 _block) external view override returns (uint256) {
         return _getValueAt(_pointsSum[tokenId], _block);
     }
 
-    function pointsTotal() external view returns (uint256) {
+    function pointsTotal() external view override returns (uint256) {
         return _getValueAt(_pointsTotal, block.timestamp);
     }
 
-    function pointsTotalAt(uint256 _block) external view returns (uint256) {
+    function pointsTotalAt(uint256 _block) external view override returns (uint256) {
         return _getValueAt(_pointsTotal, _block);
     }
 
-    function dividendsLength() external view returns (uint256) {
-        return dividends.length;
+    function dividendsLength(address token) external view override returns (uint256) {
+        return dividends[token].length;
     }
 
     /**
@@ -164,20 +162,21 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         emit Vote(tokenId, msg.sender, userWeight);
     }
 
-    function claimDividends(uint256[] calldata ids) external override {
+    function claimDividends(address token, uint256[] calldata ids) external override {
+        uint256 amount;
         for (uint256 i; i < ids.length; i++) {
             uint256 id = ids[i];
-            require(!dividendsClaimed[id][msg.sender], "NFTG: CLAIMED");
-            dividendsClaimed[id][msg.sender] = true;
+            require(!dividendsClaimed[token][id][msg.sender], "NFTG: CLAIMED");
+            dividendsClaimed[token][id][msg.sender] = true;
 
-            Dividend memory dividend = dividends[id];
-            uint256 amount = (dividend.amount *
-                _getValueAt(_points[dividend.tokenId][msg.sender], dividend.blockNumber)) / dividend.total;
-            require(amount > 0, "NFTG: INSUFFICIENT_AMOUNT");
-            Tokens.transfer(dividend.token, msg.sender, amount);
-
-            emit ClaimDividend(id, msg.sender, dividend.token, amount);
+            Dividend memory dividend = dividends[token][id];
+            uint256 pt = _getValueAt(_points[dividend.tokenId][msg.sender], dividend.blockNumber);
+            if (pt > 0) {
+                amount += (pt * uint256(dividend.amountPerShare)) / 1e18;
+            }
         }
+        emit ClaimDividends(token, amount, msg.sender);
+        Tokens.transfer(token, msg.sender, amount);
     }
 
     /**
@@ -238,17 +237,14 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         }
         uint256 dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
         Checkpoint[] storage checkpoints = _pointsSum[tokenId];
-        dividends.push(
+        dividends[currency].push(
             Dividend(
                 tokenId,
-                uint128(block.timestamp),
-                uint128(dividend),
-                currency,
-                checkpoints[checkpoints.length - 1].value
+                uint64(block.timestamp),
+                uint192((dividend * 1e18) / checkpoints[checkpoints.length - 1].value)
             )
         );
-        emit AddDividend(tokenId, currency, dividend);
-
+        emit DistributeDividend(currency, dividends[currency].length - 1, tokenId, dividend);
         Tokens.transfer(currency, to, amount - fee - dividend);
     }
 }
