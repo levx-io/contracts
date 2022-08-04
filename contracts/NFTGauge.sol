@@ -41,21 +41,22 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         ve = IGaugeController(_controller).votingEscrow();
     }
 
-    function points(uint256 tokenId, address user) external view override returns (uint256) {
-        return _exists(tokenId) ? _getValueAt(_points[tokenId][user], block.timestamp) : 0;
+    function points(uint256 tokenId, address user) public view override returns (uint256) {
+        if (!_exists(tokenId)) return 0;
+        return _lastValue(_pointsSum[tokenId]) > 0 ? _lastValue(_points[tokenId][user]) : 0;
     }
 
     function pointsAt(
         uint256 tokenId,
         address user,
         uint256 _block
-    ) external view override returns (uint256) {
-        uint256 sum = _getValueAt(_pointsSum[tokenId], _block);
-        return sum > 0 ? _getValueAt(_points[tokenId][user], _block) : 0;
+    ) public view override returns (uint256) {
+        if (!_exists(tokenId)) return 0;
+        return _getValueAt(_pointsSum[tokenId], _block) > 0 ? _getValueAt(_points[tokenId][user], _block) : 0;
     }
 
     function pointsSum(uint256 tokenId) external view override returns (uint256) {
-        return _getValueAt(_pointsSum[tokenId], block.timestamp);
+        return _lastValue(_pointsSum[tokenId]);
     }
 
     function pointsSumAt(uint256 tokenId, uint256 _block) external view override returns (uint256) {
@@ -63,7 +64,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     function pointsTotal() external view override returns (uint256) {
-        return _getValueAt(_pointsTotal, block.timestamp);
+        return _lastValue(_pointsTotal);
     }
 
     function pointsTotalAt(uint256 _block) external view override returns (uint256) {
@@ -121,10 +122,9 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         _burn(tokenId);
 
-        Checkpoint[] storage checkpointsSum = _pointsSum[tokenId];
-        uint256 sum = checkpointsSum[checkpointsSum.length - 1].value;
-        _updateValueAtNow(checkpointsSum, 0);
-        _updateValueAtNow(_pointsTotal, _pointsTotal[_pointsTotal.length - 1].value - sum);
+        uint256 sum = _lastValue(_pointsSum[tokenId]);
+        _updateValueAtNow(_pointsSum[tokenId], 0);
+        _updateValueAtNow(_pointsTotal, _lastValue(_pointsTotal) - sum);
 
         emit Unwrap(tokenId, to);
 
@@ -235,16 +235,19 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         } else {
             fee = INFTGaugeFactory(factory).distributeFees(currency, amount);
         }
-        uint256 dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
-        Checkpoint[] storage checkpoints = _pointsSum[tokenId];
-        dividends[currency].push(
-            Dividend(
-                tokenId,
-                uint64(block.timestamp),
-                uint192((dividend * 1e18) / checkpoints[checkpoints.length - 1].value)
-            )
-        );
-        emit DistributeDividend(currency, dividends[currency].length - 1, tokenId, dividend);
+
+        uint256 dividend;
+        uint256 sum = _lastValue(_pointsSum[tokenId]);
+        if (sum > 0) {
+            dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
+            dividends[currency].push(Dividend(tokenId, uint64(block.timestamp), uint192((dividend * 1e18) / sum)));
+            emit DistributeDividend(currency, dividends[currency].length - 1, tokenId, dividend);
+        }
         Tokens.transfer(currency, to, amount - fee - dividend);
+    }
+
+    function _lastValue(Checkpoint[] storage checkpoints) internal view returns (uint256) {
+        uint256 length = checkpoints.length;
+        return length > 0 ? uint256(checkpoints[length - 1].value) : 0;
     }
 }
