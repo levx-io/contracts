@@ -134,28 +134,11 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     function vote(uint256 tokenId, uint256 userWeight) public override {
         uint256 balance = IVotingEscrow(ve).balanceOf(msg.sender);
         uint256 pointNew = (balance * userWeight) / 10000;
+        uint256 pointOld = points(tokenId, msg.sender);
 
-        Checkpoint[] storage checkpoints = _points[tokenId][msg.sender];
-        uint256 numCheckpoints = checkpoints.length;
-        uint256 pointOld;
-        if (numCheckpoints > 0) {
-            pointOld = checkpoints[numCheckpoints - 1].value;
-        }
-        _updateValueAtNow(checkpoints, pointNew);
-
-        Checkpoint[] storage checkpointsSum = _pointsSum[tokenId];
-        uint256 numCheckpointsSum = checkpointsSum.length;
-        if (numCheckpointsSum > 0) {
-            _updateValueAtNow(checkpointsSum, checkpointsSum[numCheckpointsSum - 1].value + pointNew - pointOld);
-        } else {
-            _updateValueAtNow(checkpointsSum, pointNew);
-        }
-        uint256 numCheckpointsTotal = _pointsTotal.length;
-        if (numCheckpointsTotal > 0) {
-            _updateValueAtNow(_pointsTotal, _pointsTotal[_pointsTotal.length - 1].value + pointNew - pointOld);
-        } else {
-            _updateValueAtNow(_pointsTotal, pointNew);
-        }
+        _updateValueAtNow(_points[tokenId][msg.sender], pointNew);
+        _updateValueAtNow(_pointsSum[tokenId], _lastValue(_pointsSum[tokenId]) + pointNew - pointOld);
+        _updateValueAtNow(_pointsTotal, _lastValue(_pointsTotal) + pointNew - pointOld);
 
         IGaugeController(controller).voteForGaugeWeights(msg.sender, userWeight);
 
