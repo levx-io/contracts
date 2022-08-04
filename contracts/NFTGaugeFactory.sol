@@ -126,12 +126,15 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         require(value > 0, "NFTGF: LOCK_NOT_FOUND");
         require(start <= fees[token][from].timestamp, "NFTGF: FROM_TIMESTAMP_TOO_EARLY");
 
+        uint256 epoch = IVotingEscrow(ve).userPointEpoch(msg.sender);
+        (int128 bias, int128 slope, uint256 ts, ) = IVotingEscrow(ve).userPointHistory(msg.sender, epoch);
+
         uint256 amount;
         for (uint256 i = from; i <= to; ) {
             Fee memory fee = fees[token][i];
-            uint256 balance = IVotingEscrow(ve).balanceOf(msg.sender, fee.timestamp);
+            int128 balance = bias - slope * int128(int256(uint256(fee.timestamp) - ts));
             if (balance > 0) {
-                amount += (balance * uint256(fee.amountPerShare)) / 1e18;
+                amount += (uint256(uint128(balance)) * uint256(fee.amountPerShare)) / 1e18;
             }
             unchecked {
                 ++i;
