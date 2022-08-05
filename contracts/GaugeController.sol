@@ -4,6 +4,7 @@ pragma solidity ^0.8.14;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IGaugeController.sol";
 import "./interfaces/IVotingEscrow.sol";
+import "./interfaces/INFTGauge.sol";
 
 function max(uint256 a, uint256 b) pure returns (uint256) {
     if (a > b) return a;
@@ -28,7 +29,7 @@ contract GaugeController is Ownable, IGaugeController {
         uint256 end;
     }
 
-    uint256 internal constant MULTIPLIER = 10**18;
+    uint256 internal constant MULTIPLIER = 1e18;
 
     uint256 public override interval;
     uint256 public override weightVoteDelay;
@@ -247,6 +248,14 @@ contract GaugeController is Ownable, IGaugeController {
      */
     function changeGaugeWeight(address addr, uint256 weight) external override onlyOwner {
         _changeGaugeWeight(addr, weight);
+    }
+
+    /**
+     * @notice Toggle the killed status of the gauge
+     * @param addr Gauge address
+     */
+    function killGauge(address addr) external override onlyOwner {
+        INFTGauge(addr).killMe();
     }
 
     /**

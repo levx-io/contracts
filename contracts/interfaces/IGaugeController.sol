@@ -81,6 +81,8 @@ interface IGaugeController {
 
     function changeGaugeWeight(address addr, uint256 weight) external;
 
+    function killGauge(address addr) external;
+
     function checkpoint() external;
 
     function checkpointGauge(address addr) external;

@@ -4,41 +4,62 @@ pragma solidity ^0.8.14;
 import "./base/WrappedERC721.sol";
 import "./interfaces/INFTGauge.sol";
 import "./interfaces/IGaugeController.sol";
+import "./interfaces/IMinter.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./libraries/Tokens.sol";
 
 contract NFTGauge is WrappedERC721, INFTGauge {
-    struct Checkpoint {
-        uint128 fromBlock;
-        uint128 value;
+    struct Snapshot {
+        uint64 timestamp;
+        uint192 value;
     }
 
     struct Dividend {
         uint256 tokenId;
-        uint64 blockNumber;
-        uint192 amountPerShare;
+        uint64 timestamp;
+        uint192 amountPerPoint;
     }
 
     address public override controller;
+    address public override minter;
     address public override ve;
+
+    mapping(uint256 => Snapshot[]) public override rewards;
+    mapping(uint256 => mapping(uint256 => mapping(address => bool))) public override rewardsClaimed;
 
     mapping(uint256 => uint256) public override dividendRatios;
     mapping(address => Dividend[]) public override dividends;
     mapping(address => mapping(uint256 => mapping(address => bool))) public override dividendsClaimed;
 
-    mapping(uint256 => mapping(address => Checkpoint[])) internal _points;
-    mapping(uint256 => Checkpoint[]) internal _pointsSum;
-    Checkpoint[] internal _pointsTotal;
+    bool public override isKilled;
+
+    uint256 internal _interval;
+
+    mapping(uint256 => mapping(address => Snapshot[])) internal _points;
+    mapping(uint256 => Snapshot[]) internal _pointsSum;
+    Snapshot[] internal _pointsTotal;
+
+    uint256 internal _lastCheckpoint;
+    uint256 internal _inflationRate;
+    uint256 internal _futureEpochTime;
 
     function initialize(
         address _nftContract,
         address _tokenURIRenderer,
-        address _controller
+        address _controller,
+        address _minter,
+        address _ve
     ) external override initializer {
         __WrappedERC721_init(_nftContract, _tokenURIRenderer);
 
         controller = _controller;
-        ve = IGaugeController(_controller).votingEscrow();
+        minter = _minter;
+        ve = _ve;
+
+        _interval = IGaugeController(_controller).interval();
+        _lastCheckpoint = ((block.timestamp + _interval) / _interval) * _interval;
+        _inflationRate = IMinter(_minter).rate();
+        _futureEpochTime = IMinter(_minter).futureEpochTimeWrite();
     }
 
     function points(uint256 tokenId, address user) public view override returns (uint256) {
@@ -73,6 +94,51 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     function dividendsLength(address token) external view override returns (uint256) {
         return dividends[token].length;
+    }
+
+    /**
+     * @notice Toggle the killed status of the gauge
+     */
+    function killMe() external override {
+        require(msg.sender == controller, "NFTG: FORBIDDDEN");
+        isKilled = !isKilled;
+    }
+
+    /**
+     * @notice Checkpoint for a specific token id
+     * @param tokenId Token Id
+     */
+    function checkpoint(uint256 tokenId) external override returns (uint256 amountToMint) {
+        address _minter = minter;
+        address _controller = controller;
+
+        uint256 time = _lastCheckpoint;
+        uint256 rate = _inflationRate;
+        uint256 newRate = rate;
+        uint256 prevFutureEpoch = _futureEpochTime;
+        if (prevFutureEpoch >= time) {
+            _futureEpochTime = IMinter(_minter).futureEpochTimeWrite();
+            newRate = IMinter(_minter).rate();
+            _inflationRate = newRate;
+        }
+        IGaugeController(_controller).checkpointGauge(address(this));
+
+        if (isKilled) rate = 0; // Stop distributing inflation as soon as killed
+
+        if (block.timestamp > time) {
+            for (uint256 i; i < 500; ) {
+                uint256 w = IGaugeController(_controller).gaugeRelativeWeight(address(this), time);
+
+                // TODO: push rewards
+
+                time += _interval;
+                if (time > block.timestamp) break;
+
+                unchecked {
+                    ++i;
+                }
+            }
+        }
     }
 
     /**
@@ -153,9 +219,9 @@ contract NFTGauge is WrappedERC721, INFTGauge {
             dividendsClaimed[token][id][msg.sender] = true;
 
             Dividend memory dividend = dividends[token][id];
-            uint256 pt = _getValueAt(_points[dividend.tokenId][msg.sender], dividend.blockNumber);
+            uint256 pt = _getValueAt(_points[dividend.tokenId][msg.sender], dividend.timestamp);
             if (pt > 0) {
-                amount += (pt * uint256(dividend.amountPerShare)) / 1e18;
+                amount += (pt * uint256(dividend.amountPerPoint)) / 1e18;
             }
         }
         emit ClaimDividends(token, amount, msg.sender);
@@ -163,46 +229,51 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     /**
-     * @dev `_getValueAt` retrieves the number of tokens at a given block number
-     * @param checkpoints The history of values being queried
-     * @param _block The block number to retrieve the value at
-     * @return The weight at `_block`
+     * @dev `_getValueAt` retrieves the number of tokens at a given time
+     * @param snapshots The history of values being queried
+     * @param timestamp The block timestamp to retrieve the value at
+     * @return The weight at `timestamp`
      */
-    function _getValueAt(Checkpoint[] storage checkpoints, uint256 _block) internal view returns (uint256) {
-        if (checkpoints.length == 0) return 0;
+    function _getValueAt(Snapshot[] storage snapshots, uint256 timestamp) internal view returns (uint256) {
+        if (snapshots.length == 0) return 0;
 
         // Shortcut for the actual value
-        Checkpoint storage last = checkpoints[checkpoints.length - 1];
-        if (_block >= last.fromBlock) return last.value;
-        if (_block < checkpoints[0].fromBlock) return 0;
+        Snapshot storage last = snapshots[snapshots.length - 1];
+        if (timestamp >= last.timestamp) return last.value;
+        if (timestamp < snapshots[0].timestamp) return 0;
 
         // Binary search of the value in the array
         uint256 min = 0;
-        uint256 max = checkpoints.length - 1;
+        uint256 max = snapshots.length - 1;
         while (max > min) {
             uint256 mid = (max + min + 1) / 2;
-            if (checkpoints[mid].fromBlock <= _block) {
+            if (snapshots[mid].timestamp <= timestamp) {
                 min = mid;
             } else {
                 max = mid - 1;
             }
         }
-        return checkpoints[min].value;
+        return snapshots[min].value;
+    }
+
+    function _lastValue(Snapshot[] storage snapshots) internal view returns (uint256) {
+        uint256 length = snapshots.length;
+        return length > 0 ? uint256(snapshots[length - 1].value) : 0;
     }
 
     /**
-     * @dev `_updateValueAtNow` is used to update checkpoints
-     * @param checkpoints The history of data being updated
+     * @dev `_updateValueAtNow` is used to update snapshots
+     * @param snapshots The history of data being updated
      * @param _value The new number of weight
      */
-    function _updateValueAtNow(Checkpoint[] storage checkpoints, uint256 _value) internal {
-        if ((checkpoints.length == 0) || (checkpoints[checkpoints.length - 1].fromBlock < block.number)) {
-            Checkpoint storage newCheckPoint = checkpoints.push();
-            newCheckPoint.fromBlock = uint128(block.number);
-            newCheckPoint.value = uint128(_value);
+    function _updateValueAtNow(Snapshot[] storage snapshots, uint256 _value) internal {
+        if ((snapshots.length == 0) || (snapshots[snapshots.length - 1].timestamp < block.timestamp)) {
+            Snapshot storage newCheckPoint = snapshots.push();
+            newCheckPoint.timestamp = uint64(block.timestamp);
+            newCheckPoint.value = uint192(_value);
         } else {
-            Checkpoint storage oldCheckPoint = checkpoints[checkpoints.length - 1];
-            oldCheckPoint.value = uint128(_value);
+            Snapshot storage oldCheckPoint = snapshots[snapshots.length - 1];
+            oldCheckPoint.value = uint192(_value);
         }
     }
 
@@ -223,14 +294,15 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 sum = _lastValue(_pointsSum[tokenId]);
         if (sum > 0) {
             dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
-            dividends[currency].push(Dividend(tokenId, uint64(block.timestamp), uint192((dividend * 1e18) / sum)));
+            dividends[currency].push(
+                Dividend(
+                    tokenId,
+                    uint64(((block.timestamp + _interval) / _interval) * _interval),
+                    uint192((dividend * 1e18) / sum)
+                )
+            );
             emit DistributeDividend(currency, dividends[currency].length - 1, tokenId, dividend);
         }
         Tokens.transfer(currency, to, amount - fee - dividend);
-    }
-
-    function _lastValue(Checkpoint[] storage checkpoints) internal view returns (uint256) {
-        uint256 length = checkpoints.length;
-        return length > 0 ? uint256(checkpoints[length - 1].value) : 0;
     }
 }

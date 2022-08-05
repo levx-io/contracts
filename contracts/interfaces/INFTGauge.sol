@@ -13,12 +13,24 @@ interface INFTGauge is IWrappedERC721 {
     function initialize(
         address _nftContract,
         address _tokenURIRenderer,
-        address _controller
+        address _controller,
+        address _minter,
+        address _ve
     ) external;
 
     function controller() external view returns (address);
 
+    function minter() external view returns (address);
+
     function ve() external view returns (address);
+
+    function rewards(uint256 tokenId, uint256 id) external view returns (uint64 blockNumber, uint192 amountPerShare);
+
+    function rewardsClaimed(
+        uint256 tokenId,
+        uint256 id,
+        address user
+    ) external view returns (bool);
 
     function dividendRatios(uint256 tokenId) external view returns (uint256);
 
@@ -37,6 +49,8 @@ interface INFTGauge is IWrappedERC721 {
         address user
     ) external view returns (bool);
 
+    function isKilled() external view returns (bool);
+
     function points(uint256 tokenId, address user) external view returns (uint256);
 
     function pointsAt(
@@ -54,6 +68,10 @@ interface INFTGauge is IWrappedERC721 {
     function pointsTotalAt(uint256 _block) external view returns (uint256);
 
     function dividendsLength(address token) external view returns (uint256);
+
+    function killMe() external;
+
+    function checkpoint(uint256 tokenId) external returns (uint256 amountToMint);
 
     function wrap(
         uint256 tokenId,

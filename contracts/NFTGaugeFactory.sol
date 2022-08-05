@@ -19,6 +19,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
 
     address public immutable override tokenURIRenderer;
     address public immutable override controller;
+    address public immutable override minter;
     address public immutable override ve;
 
     address public override target;
@@ -35,17 +36,19 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     constructor(
         address _tokenURIRenderer,
         address _controller,
+        address _minter,
         uint256 _feeRatio
     ) {
         tokenURIRenderer = _tokenURIRenderer;
         controller = _controller;
+        minter = _minter;
         ve = IGaugeController(_controller).votingEscrow();
         feeRatio = _feeRatio;
 
         emit UpdateFeeRatio(_feeRatio);
 
         NFTGauge gauge = new NFTGauge();
-        gauge.initialize(address(0), address(0), address(0));
+        gauge.initialize(address(0), address(0), address(0), address(0), address(0));
         target = address(gauge);
     }
 
@@ -78,7 +81,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         require(gauges[nftContract] == address(0), "NFTGF: GAUGE_CREATED");
 
         gauge = _createClone(target);
-        INFTGauge(gauge).initialize(nftContract, tokenURIRenderer, controller);
+        INFTGauge(gauge).initialize(nftContract, tokenURIRenderer, controller, minter, ve);
 
         gauges[nftContract] = gauge;
         isGauge[gauge] = true;
