@@ -2,6 +2,12 @@
 pragma solidity ^0.8.14;
 
 import "./interfaces/IMinter.sol";
+import "./interfaces/IGaugeController.sol";
+import "./interfaces/INFTGauge.sol";
+
+interface IToken {
+    function mint(address account, uint256 value) external;
+}
 
 contract Minter is IMinter {
     uint256 constant RATE_DENOMINATOR = 1e18;
@@ -18,7 +24,7 @@ contract Minter is IMinter {
     uint256 public override startEpochTime;
     uint256 public override rate;
 
-    mapping(address => mapping(address => uint256)) public override minted;
+    mapping(address => mapping(uint256 => mapping(address => uint256))) public override minted; // gauge -> tokenId -> user -> amount
 
     uint256 internal startEpochSupply;
 
@@ -133,12 +139,24 @@ contract Minter is IMinter {
         } else return _startEpochTime + rateReductionTime;
     }
 
-    function mint(address gaugeAddr) external override {
-        // TODO
-    }
+    /**
+     * @notice Mint everything which belongs to `msg.sender` and send to them
+     * @param gaugeAddr `NFTGauge` address to get mintable amount from
+     * @param tokenId tokenId
+     */
+    function mint(address gaugeAddr, uint256 tokenId) external override {
+        require(IGaugeController(controller).gaugeTypes(gaugeAddr) >= 0, "MT: GAUGE_NOT_ADDED");
 
-    function mintFor(address gaugeAddr, address _for) external override {
-        // TODO
+        INFTGauge(gaugeAddr).userCheckpoint(tokenId, msg.sender);
+        uint256 total = INFTGauge(gaugeAddr).integrateFractionOfUser(tokenId, msg.sender);
+
+        uint256 _minted = minted[gaugeAddr][tokenId][msg.sender];
+        if (total > _minted) {
+            minted[gaugeAddr][tokenId][msg.sender] = total;
+
+            emit Minted(msg.sender, gaugeAddr, tokenId, total - _minted);
+            IToken(token).mint(msg.sender, total - _minted);
+        }
     }
 
     function _availableSupply() internal view returns (uint256) {

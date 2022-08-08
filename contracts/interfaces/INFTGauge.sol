@@ -49,6 +49,24 @@ interface INFTGauge is IWrappedERC721 {
         address user
     ) external view returns (bool);
 
+    function futureEpochTime() external view returns (uint256);
+
+    function integrateCheckpoint() external view returns (uint256);
+
+    function integrateInvSupply() external view returns (uint256);
+
+    function integrateCheckpointsOf(uint256 tokenId, uint256 period) external view returns (uint256);
+
+    function integrateInvSuppliesOf(uint256 tokenId, uint256 time) external view returns (uint256);
+
+    function integrateFractionsOf(uint256 tokenId, uint256 time) external view returns (uint256);
+
+    function periodOfUser(uint256 tokenId, address user) external view returns (uint256);
+
+    function integrateFractionOfUser(uint256 tokenId, address user) external view returns (uint256);
+
+    function inflationRate() external view returns (uint256);
+
     function isKilled() external view returns (bool);
 
     function points(uint256 tokenId, address user) external view returns (uint256);
@@ -69,9 +87,11 @@ interface INFTGauge is IWrappedERC721 {
 
     function dividendsLength(address token) external view returns (uint256);
 
+    function periodOf(uint256 tokenId) external view returns (uint256);
+
     function killMe() external;
 
-    function checkpoint(uint256 tokenId) external returns (uint256 amountToMint);
+    function userCheckpoint(uint256 tokenId, address user) external;
 
     function wrap(
         uint256 tokenId,
