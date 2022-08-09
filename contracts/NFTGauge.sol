@@ -244,12 +244,13 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     ) public override {
         require(dividendRatio <= 10000, "NFTG: INVALID_RATIO");
 
+        _tokenCheckpoint(tokenId);
+
         dividendRatios[tokenId] = dividendRatio;
 
         _mint(to, tokenId);
 
         vote(tokenId, userWeight);
-        _tokenCheckpoint(tokenId);
 
         emit Wrap(tokenId, to);
 
@@ -259,6 +260,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     function unwrap(uint256 tokenId, address to) public override {
         require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
 
+        _tokenCheckpoint(tokenId);
+
         dividendRatios[tokenId] = 0;
 
         _burn(tokenId);
@@ -266,7 +269,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 sum = _lastValue(_pointsSum[tokenId]);
         _updateValueAtNow(_pointsSum[tokenId], 0);
         _updateValueAtNow(_pointsTotal, _lastValue(_pointsTotal) - sum);
-        _tokenCheckpoint(tokenId);
 
         emit Unwrap(tokenId, to);
 
