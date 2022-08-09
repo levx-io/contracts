@@ -1,6 +1,6 @@
 {
   "name": "@levxdao/ve",
-  "description": "Voting-escrowed token and its delegates",
+  "description": "VE and Gauge Voting for NFTs",
   "keywords": [
     "levx",
     "levx-dao",
