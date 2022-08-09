@@ -148,7 +148,7 @@ contract Minter is IMinter {
         require(IGaugeController(controller).gaugeTypes(gaugeAddr) >= 0, "MT: GAUGE_NOT_ADDED");
 
         INFTGauge(gaugeAddr).userCheckpoint(tokenId, msg.sender);
-        uint256 total = INFTGauge(gaugeAddr).integrateFractionOfUser(tokenId, msg.sender);
+        uint256 total = INFTGauge(gaugeAddr).integrateFraction(tokenId, msg.sender);
 
         uint256 _minted = minted[gaugeAddr][tokenId][msg.sender];
         if (total > _minted) {

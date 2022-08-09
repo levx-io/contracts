@@ -8,6 +8,11 @@ import "./interfaces/IMinter.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./libraries/Tokens.sol";
 
+function _min(uint256 a, uint256 b) pure returns (uint256) {
+    if (a < b) return a;
+    return b;
+}
+
 contract NFTGauge is WrappedERC721, INFTGauge {
     struct Snapshot {
         uint64 timestamp;
@@ -23,6 +28,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     address public override controller;
     address public override minter;
     address public override ve;
+    uint256 public override futureEpochTime;
 
     mapping(uint256 => Snapshot[]) public override rewards;
     mapping(uint256 => mapping(uint256 => mapping(address => bool))) public override rewardsClaimed;
@@ -31,17 +37,12 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     mapping(address => Dividend[]) public override dividends;
     mapping(address => mapping(uint256 => mapping(address => bool))) public override dividendsClaimed;
 
-    uint256 public override futureEpochTime;
+    int128 public override period;
+    mapping(int128 => uint256) public override periodTimestamp;
+    mapping(int128 => uint256) public override integrateInvSupply; // bump epoch when rate() changes
 
-    uint256 public override integrateCheckpoint;
-    uint256 public override integrateInvSupply;
-
-    mapping(uint256 => uint256[]) public override integrateCheckpointsOf; // tokenId -> period -> time
-    mapping(uint256 => mapping(uint256 => uint256)) public override integrateInvSuppliesOf; // tokenId -> time -> supply
-    mapping(uint256 => mapping(uint256 => uint256)) public override integrateFractionsOf; // tokenId -> time -> fraction
-
-    mapping(uint256 => mapping(address => uint256)) public override periodOfUser; // tokenId -> user -> period
-    mapping(uint256 => mapping(address => uint256)) public override integrateFractionOfUser; // tokenId -> user -> fraction
+    mapping(uint256 => mapping(address => int128)) public override periodOf; // tokenId -> user -> period
+    mapping(uint256 => mapping(address => uint256)) public override integrateFraction; // tokenId -> user -> fraction
 
     uint256 public override inflationRate;
 
@@ -67,7 +68,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         ve = _ve;
 
         _interval = IGaugeController(_controller).interval();
-        integrateCheckpoint = ((block.timestamp + _interval) / _interval) * _interval;
+        periodTimestamp[0] = block.timestamp;
         inflationRate = IMinter(_minter).rate();
         futureEpochTime = IMinter(_minter).futureEpochTimeWrite();
     }
@@ -106,10 +107,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         return dividends[token].length;
     }
 
-    function periodOf(uint256 tokenId) external view override returns (uint256) {
-        return integrateCheckpointsOf[tokenId].length;
-    }
-
     /**
      * @notice Toggle the killed status of the gauge
      */
@@ -118,16 +115,16 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         isKilled = !isKilled;
     }
 
-    function _checkpoint() internal returns (uint256 _integrateCheckpoint, uint256 _integrateInvSupply) {
+    function _checkpoint() internal returns (int128 _period, uint256 _integrateInvSupply) {
         address _minter = minter;
         address _controller = controller;
-
-        _integrateCheckpoint = integrateCheckpoint;
-        _integrateInvSupply = integrateInvSupply;
+        _period = period;
+        uint256 _periodTime = periodTimestamp[_period];
+        _integrateInvSupply = integrateInvSupply[_period];
         uint256 rate = inflationRate;
         uint256 newRate = rate;
         uint256 prevFutureEpoch = futureEpochTime;
-        if (prevFutureEpoch >= _integrateCheckpoint) {
+        if (prevFutureEpoch >= _periodTime) {
             futureEpochTime = IMinter(_minter).futureEpochTimeWrite();
             newRate = IMinter(_minter).rate();
             inflationRate = newRate;
@@ -138,49 +135,47 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         if (isKilled) rate = 0; // Stop distributing inflation as soon as killed
 
-        if (block.timestamp > _integrateCheckpoint) {
+        // Update integral of 1/total
+        if (block.timestamp > _periodTime) {
             uint256 interval = _interval;
-            for (uint256 i; i < 120; ) {
-                uint256 w = IGaugeController(_controller).gaugeRelativeWeight(address(this), _integrateCheckpoint);
+            uint256 prevWeekTime = _periodTime;
+            uint256 weekTime = _min(((_periodTime + interval) / interval) * interval, block.timestamp);
+            for (uint256 i; i < 250; ) {
+                uint256 dt = weekTime - prevWeekTime;
+                uint256 w = IGaugeController(_controller).gaugeRelativeWeight(
+                    address(this),
+                    (prevWeekTime / interval) * interval
+                );
 
                 if (total > 0) {
-                    if (prevFutureEpoch >= _integrateCheckpoint && prevFutureEpoch < _integrateCheckpoint + interval) {
-                        _integrateInvSupply += (rate * w * (prevFutureEpoch - _integrateCheckpoint)) / total;
+                    if (prevFutureEpoch >= prevWeekTime && prevFutureEpoch < weekTime) {
+                        // If we went across one or multiple epochs, apply the rate
+                        // of the first epoch until it ends, and then the rate of
+                        // the last epoch.
+                        // If more than one epoch is crossed - the gauge gets less,
+                        // but that'd meen it wasn't called for more than 1 year
+                        _integrateInvSupply += (rate * w * (prevFutureEpoch - prevWeekTime)) / total;
                         rate = newRate;
-                        _integrateInvSupply += (rate * w * (_integrateCheckpoint + interval - prevFutureEpoch)) / total;
+                        _integrateInvSupply += (rate * w * (weekTime - prevFutureEpoch)) / total;
                     } else {
-                        _integrateInvSupply += (rate * w * interval) / total;
+                        _integrateInvSupply += (rate * w * dt) / total;
                     }
                 }
-                if (_integrateCheckpoint + interval > block.timestamp) break;
-                _integrateCheckpoint += interval;
+
+                if (weekTime == block.timestamp) break;
+                prevWeekTime = weekTime;
+                weekTime = _min(weekTime + interval, block.timestamp);
 
                 unchecked {
                     ++i;
                 }
             }
-
-            integrateCheckpoint = _integrateCheckpoint;
-            integrateInvSupply = _integrateInvSupply;
         }
-    }
 
-    function _tokenCheckpoint(uint256 tokenId) internal {
-        (uint256 _integrateCheckpoint, uint256 _integrateInvSupply) = _checkpoint();
-
-        // Update token-specific integrals
-        uint256[] storage checkpoints = integrateCheckpointsOf[tokenId];
-        uint256 prevCheckpoint = checkpoints.length > 0 ? checkpoints[checkpoints.length - 1] : 0;
-        if (prevCheckpoint < _integrateCheckpoint) {
-            checkpoints.push(_integrateCheckpoint);
-
-            uint256 sum = _lastValue(_pointsSum[tokenId]);
-            uint256 fraction = (sum * (_integrateInvSupply - integrateInvSuppliesOf[tokenId][prevCheckpoint])) / 1e18;
-            integrateFractionsOf[tokenId][_integrateCheckpoint] =
-                integrateFractionsOf[tokenId][prevCheckpoint] +
-                fraction;
-            integrateInvSuppliesOf[tokenId][_integrateCheckpoint] = _integrateInvSupply;
-        }
+        ++_period;
+        period = _period;
+        periodTimestamp[_period] = block.timestamp;
+        integrateInvSupply[_period] = _integrateInvSupply;
     }
 
     /**
@@ -188,31 +183,23 @@ contract NFTGauge is WrappedERC721, INFTGauge {
      * @param tokenId Token Id
      * @param user User address
      */
-    function userCheckpoint(uint256 tokenId, address user) external override {
+    function userCheckpoint(uint256 tokenId, address user) public override {
         require(msg.sender == user || user == minter, "NFTG: FORBIDDEN");
-        _tokenCheckpoint(tokenId);
+        (int128 _period, uint256 _integrateInvSupply) = _checkpoint();
 
-        uint256 userPeriod = periodOfUser[tokenId][user] + 1;
-        uint256 tokenPeriod = integrateCheckpointsOf[tokenId].length;
-        if (userPeriod >= tokenPeriod) return;
-
-        uint256 integrateFraction = integrateFractionOfUser[tokenId][user];
-
-        for (uint256 i; i < 120; ) {
-            uint256 time = integrateCheckpointsOf[tokenId][userPeriod + i];
-            uint256 fraction = integrateFractionsOf[tokenId][time];
-
-            integrateFraction += (fraction * pointsAt(tokenId, user, time)) / pointsSumAt(tokenId, time);
-
-            if (userPeriod + i == tokenPeriod) break;
-
-            unchecked {
-                ++i;
+        // Update user-specific integrals
+        int128 userPeriod = periodOf[tokenId][user];
+        uint256 oldIntegrateInvSupply = integrateInvSupply[userPeriod];
+        uint256 dIntegrate = _integrateInvSupply - oldIntegrateInvSupply;
+        if (dIntegrate > 0) {
+            uint256 sum = _lastValue(_pointsSum[tokenId]);
+            uint256 pt = _lastValue(_points[tokenId][user]);
+            integrateFraction[tokenId][user] += (pt * dIntegrate * 2) / 3 / 1e18; // 67% goes to voters
+            if (ownerOf(tokenId) == user) {
+                integrateFraction[tokenId][user] += (sum * dIntegrate) / 3 / 1e18; // 33% goes to the owner
             }
         }
-
-        periodOfUser[tokenId][user] = tokenPeriod;
-        integrateFractionOfUser[tokenId][user] = integrateFraction;
+        periodOf[tokenId][user] = _period;
     }
 
     /**
@@ -244,7 +231,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     ) public override {
         require(dividendRatio <= 10000, "NFTG: INVALID_RATIO");
 
-        _tokenCheckpoint(tokenId);
+        _checkpoint();
 
         dividendRatios[tokenId] = dividendRatio;
 
@@ -260,7 +247,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     function unwrap(uint256 tokenId, address to) public override {
         require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
 
-        _tokenCheckpoint(tokenId);
+        userCheckpoint(tokenId, msg.sender);
 
         dividendRatios[tokenId] = 0;
 
@@ -279,6 +266,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 balance = IVotingEscrow(ve).balanceOf(msg.sender);
         uint256 pointNew = (balance * userWeight) / 10000;
         uint256 pointOld = points(tokenId, msg.sender);
+
+        userCheckpoint(tokenId, msg.sender);
 
         _updateValueAtNow(_points[tokenId][msg.sender], pointNew);
         _updateValueAtNow(_pointsSum[tokenId], _lastValue(_pointsSum[tokenId]) + pointNew - pointOld);
@@ -371,16 +360,27 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 dividend;
         uint256 sum = _lastValue(_pointsSum[tokenId]);
         if (sum > 0) {
+            uint256 interval = _interval;
             dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
             dividends[currency].push(
                 Dividend(
                     tokenId,
-                    uint64(((block.timestamp + _interval) / _interval) * _interval),
+                    uint64(((block.timestamp + interval) / interval) * interval),
                     uint192((dividend * 1e18) / sum)
                 )
             );
             emit DistributeDividend(currency, dividends[currency].length - 1, tokenId, dividend);
         }
         Tokens.transfer(currency, to, amount - fee - dividend);
+    }
+
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal override {
+        super._beforeTokenTransfer(from, to, tokenId);
+
+        userCheckpoint(tokenId, from);
     }
 }

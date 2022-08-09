@@ -307,7 +307,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         address from,
         address,
         uint256 tokenId
-    ) internal override {
+    ) internal virtual override {
         if (from != address(0)) {
             delete sales[tokenId][from];
             delete currentBids[tokenId][from];

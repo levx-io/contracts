@@ -24,6 +24,8 @@ interface INFTGauge is IWrappedERC721 {
 
     function ve() external view returns (address);
 
+    function futureEpochTime() external view returns (uint256);
+
     function rewards(uint256 tokenId, uint256 id) external view returns (uint64 blockNumber, uint192 amountPerShare);
 
     function rewardsClaimed(
@@ -49,21 +51,15 @@ interface INFTGauge is IWrappedERC721 {
         address user
     ) external view returns (bool);
 
-    function futureEpochTime() external view returns (uint256);
+    function period() external view returns (int128);
 
-    function integrateCheckpoint() external view returns (uint256);
+    function periodTimestamp(int128 period) external view returns (uint256);
 
-    function integrateInvSupply() external view returns (uint256);
+    function integrateInvSupply(int128 period) external view returns (uint256);
 
-    function integrateCheckpointsOf(uint256 tokenId, uint256 period) external view returns (uint256);
+    function periodOf(uint256 tokenId, address user) external view returns (int128);
 
-    function integrateInvSuppliesOf(uint256 tokenId, uint256 time) external view returns (uint256);
-
-    function integrateFractionsOf(uint256 tokenId, uint256 time) external view returns (uint256);
-
-    function periodOfUser(uint256 tokenId, address user) external view returns (uint256);
-
-    function integrateFractionOfUser(uint256 tokenId, address user) external view returns (uint256);
+    function integrateFraction(uint256 tokenId, address user) external view returns (uint256);
 
     function inflationRate() external view returns (uint256);
 
@@ -86,8 +82,6 @@ interface INFTGauge is IWrappedERC721 {
     function pointsTotalAt(uint256 _block) external view returns (uint256);
 
     function dividendsLength(address token) external view returns (uint256);
-
-    function periodOf(uint256 tokenId) external view returns (uint256);
 
     function killMe() external;
 
