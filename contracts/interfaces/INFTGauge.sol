@@ -13,16 +13,14 @@ interface INFTGauge is IWrappedERC721 {
     function initialize(
         address _nftContract,
         address _tokenURIRenderer,
-        address _controller,
-        address _minter,
-        address _ve
+        address _minter
     ) external;
 
     function controller() external view returns (address);
 
     function minter() external view returns (address);
 
-    function ve() external view returns (address);
+    function votingEscrow() external view returns (address);
 
     function futureEpochTime() external view returns (uint256);
 

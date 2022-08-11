@@ -25,9 +25,9 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint192 amountPerPoint;
     }
 
-    address public override controller;
     address public override minter;
-    address public override ve;
+    address public override controller;
+    address public override votingEscrow;
     uint256 public override futureEpochTime;
 
     mapping(uint256 => Snapshot[]) public override rewards;
@@ -57,20 +57,18 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     function initialize(
         address _nftContract,
         address _tokenURIRenderer,
-        address _controller,
-        address _minter,
-        address _ve
+        address _minter
     ) external override initializer {
         __WrappedERC721_init(_nftContract, _tokenURIRenderer);
 
-        controller = _controller;
         minter = _minter;
-        ve = _ve;
-
-        _interval = IGaugeController(_controller).interval();
+        address _controller = IMinter(_minter).controller();
+        controller = _controller;
+        votingEscrow = IGaugeController(_controller).votingEscrow();
         periodTimestamp[0] = block.timestamp;
         inflationRate = IMinter(_minter).rate();
         futureEpochTime = IMinter(_minter).futureEpochTimeWrite();
+        _interval = IGaugeController(_controller).interval();
     }
 
     function points(uint256 tokenId, address user) public view override returns (uint256) {
@@ -231,8 +229,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     ) public override {
         require(dividendRatio <= 10000, "NFTG: INVALID_RATIO");
 
-        _checkpoint();
-
         dividendRatios[tokenId] = dividendRatio;
 
         _mint(to, tokenId);
@@ -263,7 +259,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     function vote(uint256 tokenId, uint256 userWeight) public override {
-        uint256 balance = IVotingEscrow(ve).balanceOf(msg.sender);
+        uint256 balance = IVotingEscrow(votingEscrow).balanceOf(msg.sender);
         uint256 pointNew = (balance * userWeight) / 10000;
         uint256 pointOld = points(tokenId, msg.sender);
 

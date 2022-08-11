@@ -18,9 +18,8 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     }
 
     address public immutable override tokenURIRenderer;
-    address public immutable override controller;
     address public immutable override minter;
-    address public immutable override ve;
+    address public immutable override votingEscrow;
 
     address public override target;
     uint256 public override targetVersion;
@@ -35,20 +34,18 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
 
     constructor(
         address _tokenURIRenderer,
-        address _controller,
         address _minter,
         uint256 _feeRatio
     ) {
         tokenURIRenderer = _tokenURIRenderer;
-        controller = _controller;
         minter = _minter;
-        ve = IGaugeController(_controller).votingEscrow();
+        votingEscrow = IGaugeController(IMinter(_minter).controller()).votingEscrow();
         feeRatio = _feeRatio;
 
         emit UpdateFeeRatio(_feeRatio);
 
         NFTGauge gauge = new NFTGauge();
-        gauge.initialize(address(0), address(0), address(0), address(0), address(0));
+        gauge.initialize(address(0), address(0), address(0));
         target = address(gauge);
     }
 
@@ -81,7 +78,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         require(gauges[nftContract] == address(0), "NFTGF: GAUGE_CREATED");
 
         gauge = _createClone(target);
-        INFTGauge(gauge).initialize(nftContract, tokenURIRenderer, controller, minter, ve);
+        INFTGauge(gauge).initialize(nftContract, tokenURIRenderer, minter);
 
         gauges[nftContract] = gauge;
         isGauge[gauge] = true;
@@ -113,7 +110,9 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     function _distributeFees(address token, uint256 amount) internal {
         require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
 
-        fees[token].push(Fee(uint64(block.timestamp), uint192((amount * 1e18) / IVotingEscrow(ve).totalSupply())));
+        fees[token].push(
+            Fee(uint64(block.timestamp), uint192((amount * 1e18) / IVotingEscrow(votingEscrow).totalSupply()))
+        );
 
         emit DistributeFees(token, fees[token].length - 1, amount);
     }
@@ -125,12 +124,12 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     ) external override {
         require(from > feesClaimed[token][msg.sender], "NFTGF: INVALID_FROM");
 
-        (int128 value, , uint256 start, ) = IVotingEscrow(ve).locked(msg.sender);
+        (int128 value, , uint256 start, ) = IVotingEscrow(votingEscrow).locked(msg.sender);
         require(value > 0, "NFTGF: LOCK_NOT_FOUND");
         require(start <= fees[token][from].timestamp, "NFTGF: FROM_TIMESTAMP_TOO_EARLY");
 
-        uint256 epoch = IVotingEscrow(ve).userPointEpoch(msg.sender);
-        (int128 bias, int128 slope, uint256 ts, ) = IVotingEscrow(ve).userPointHistory(msg.sender, epoch);
+        uint256 epoch = IVotingEscrow(votingEscrow).userPointEpoch(msg.sender);
+        (int128 bias, int128 slope, uint256 ts, ) = IVotingEscrow(votingEscrow).userPointHistory(msg.sender, epoch);
 
         uint256 amount;
         for (uint256 i = from; i <= to; ) {

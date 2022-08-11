@@ -11,11 +11,9 @@ interface INFTGaugeFactory {
 
     function tokenURIRenderer() external view returns (address);
 
-    function controller() external view returns (address);
-
     function minter() external view returns (address);
 
-    function ve() external view returns (address);
+    function votingEscrow() external view returns (address);
 
     function target() external view returns (address);
 
