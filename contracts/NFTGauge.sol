@@ -19,23 +19,14 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint192 value;
     }
 
-    struct Dividend {
-        uint256 tokenId;
-        uint64 timestamp;
-        uint192 amountPerPoint;
-    }
-
     address public override minter;
     address public override controller;
     address public override votingEscrow;
     uint256 public override futureEpochTime;
 
-    mapping(uint256 => Snapshot[]) public override rewards;
-    mapping(uint256 => mapping(uint256 => mapping(address => bool))) public override rewardsClaimed;
-
     mapping(uint256 => uint256) public override dividendRatios;
-    mapping(address => Dividend[]) public override dividends;
-    mapping(address => mapping(uint256 => mapping(address => bool))) public override dividendsClaimed;
+    mapping(address => mapping(uint256 => Snapshot[])) public override dividends; // currency -> tokenId -> Snapshot
+    mapping(address => mapping(uint256 => mapping(address => uint256))) public override lastDividendClaimed; // currency -> tokenId -> user -> index
 
     int128 public override period;
     mapping(int128 => uint256) public override periodTimestamp;
@@ -101,8 +92,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         return _getValueAt(_pointsTotal, timestamp);
     }
 
-    function dividendsLength(address token) external view override returns (uint256) {
-        return dividends[token].length;
+    function dividendsLength(address token, uint256 tokenId) external view override returns (uint256) {
+        return dividends[token][tokenId].length;
     }
 
     /**
@@ -274,20 +265,29 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         emit Vote(tokenId, msg.sender, userWeight);
     }
 
-    function claimDividends(address token, uint256[] calldata ids) external override {
+    function claimDividends(address token, uint256 tokenId) external override {
         uint256 amount;
-        for (uint256 i; i < ids.length; i++) {
-            uint256 id = ids[i];
-            require(!dividendsClaimed[token][id][msg.sender], "NFTG: CLAIMED");
-            dividendsClaimed[token][id][msg.sender] = true;
+        uint256 _last = lastDividendClaimed[token][tokenId][msg.sender];
+        uint256 i;
+        while (i < 250) {
+            uint256 id = _last + i;
+            if (id >= dividends[token][tokenId].length) break;
 
-            Dividend memory dividend = dividends[token][id];
-            uint256 pt = _getValueAt(_points[dividend.tokenId][msg.sender], dividend.timestamp);
+            Snapshot memory dividend = dividends[token][tokenId][id];
+            uint256 pt = _getValueAt(_points[tokenId][msg.sender], dividend.timestamp);
             if (pt > 0) {
-                amount += (pt * uint256(dividend.amountPerPoint)) / 1e18;
+                amount += (pt * uint256(dividend.value)) / 1e18;
+            }
+
+            unchecked {
+                ++i;
             }
         }
-        emit ClaimDividends(token, amount, msg.sender);
+
+        require(i > 0, "NFTG: NO_AMOUNT_TO_CLAIM");
+        lastDividendClaimed[token][tokenId][msg.sender] = _last + i;
+
+        emit ClaimDividends(token, tokenId, amount, msg.sender);
         Tokens.transfer(token, msg.sender, amount);
     }
 
@@ -358,14 +358,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         if (sum > 0) {
             uint256 interval = _interval;
             dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
-            dividends[currency].push(
-                Dividend(
-                    tokenId,
-                    uint64(((block.timestamp + interval) / interval) * interval),
-                    uint192((dividend * 1e18) / sum)
-                )
+            dividends[currency][tokenId].push(
+                Snapshot(uint64(((block.timestamp + interval) / interval) * interval), uint192((dividend * 1e18) / sum))
             );
-            emit DistributeDividend(currency, dividends[currency].length - 1, tokenId, dividend);
+            emit DistributeDividend(currency, tokenId, dividend);
         }
         Tokens.transfer(currency, to, amount - fee - dividend);
     }

@@ -7,8 +7,8 @@ interface INFTGauge is IWrappedERC721 {
     event Wrap(uint256 indexed tokenId, address indexed to);
     event Unwrap(uint256 indexed tokenId, address indexed to);
     event Vote(uint256 indexed tokenId, address indexed user, uint256 weight);
-    event DistributeDividend(address indexed token, uint256 indexed id, uint256 indexed tokenId, uint256 amount);
-    event ClaimDividends(address indexed token, uint256 amount, address indexed to);
+    event DistributeDividend(address indexed token, uint256 indexed tokenId, uint256 amount);
+    event ClaimDividends(address indexed token, uint256 indexed tokenId, uint256 amount, address indexed to);
 
     function initialize(
         address _nftContract,
@@ -24,30 +24,19 @@ interface INFTGauge is IWrappedERC721 {
 
     function futureEpochTime() external view returns (uint256);
 
-    function rewards(uint256 tokenId, uint256 id) external view returns (uint64 blockNumber, uint192 amountPerShare);
-
-    function rewardsClaimed(
-        uint256 tokenId,
-        uint256 id,
-        address user
-    ) external view returns (bool);
-
     function dividendRatios(uint256 tokenId) external view returns (uint256);
 
-    function dividends(address token, uint256 id)
-        external
-        view
-        returns (
-            uint256 tokenId,
-            uint64 blockNumber,
-            uint192 amountPerShare
-        );
-
-    function dividendsClaimed(
+    function dividends(
         address token,
-        uint256 id,
+        uint256 tokenId,
+        uint256 id
+    ) external view returns (uint64 blockNumber, uint192 amountPerShare);
+
+    function lastDividendClaimed(
+        address token,
+        uint256 tokenId,
         address user
-    ) external view returns (bool);
+    ) external view returns (uint256);
 
     function period() external view returns (int128);
 
@@ -79,7 +68,7 @@ interface INFTGauge is IWrappedERC721 {
 
     function pointsTotalAt(uint256 _block) external view returns (uint256);
 
-    function dividendsLength(address token) external view returns (uint256);
+    function dividendsLength(address token, uint256 tokenId) external view returns (uint256);
 
     function killMe() external;
 
@@ -102,5 +91,5 @@ interface INFTGauge is IWrappedERC721 {
 
     function vote(uint256 tokenId, uint256 userWeight) external;
 
-    function claimDividends(address token, uint256[] calldata ids) external;
+    function claimDividends(address token, uint256 tokenId) external;
 }
