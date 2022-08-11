@@ -63,8 +63,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     function points(uint256 tokenId, address user) public view override returns (uint256) {
-        if (!_exists(tokenId)) return 0;
-        return _lastValue(_pointsSum[tokenId]) > 0 ? _lastValue(_points[tokenId][user]) : 0;
+        return _lastValue(_points[tokenId][user]);
     }
 
     function pointsAt(
@@ -72,8 +71,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         address user,
         uint256 timestamp
     ) public view override returns (uint256) {
-        if (!_exists(tokenId)) return 0;
-        return _getValueAt(_pointsSum[tokenId], timestamp) > 0 ? _getValueAt(_points[tokenId][user], timestamp) : 0;
+        return _getValueAt(_points[tokenId][user], timestamp);
     }
 
     function pointsSum(uint256 tokenId) external view override returns (uint256) {
@@ -234,15 +232,11 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     function unwrap(uint256 tokenId, address to) public override {
         require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
 
-        userCheckpoint(tokenId, msg.sender);
-
         dividendRatios[tokenId] = 0;
 
-        _burn(tokenId);
+        vote(tokenId, 0);
 
-        uint256 sum = _lastValue(_pointsSum[tokenId]);
-        _updateValueAtNow(_pointsSum[tokenId], 0);
-        _updateValueAtNow(_pointsTotal, _lastValue(_pointsTotal) - sum);
+        _burn(tokenId);
 
         emit Unwrap(tokenId, to);
 
@@ -250,6 +244,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     function vote(uint256 tokenId, uint256 userWeight) public override {
+        require(_exists(tokenId), "NFTG: NON_EXISTENT");
+
         uint256 balance = IVotingEscrow(votingEscrow).balanceOf(msg.sender);
         uint256 pointNew = (balance * userWeight) / 10000;
         uint256 pointOld = points(tokenId, msg.sender);
