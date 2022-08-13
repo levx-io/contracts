@@ -5,11 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IGaugeController.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/IGauge.sol";
-
-function max(uint256 a, uint256 b) pure returns (uint256) {
-    if (a > b) return a;
-    return b;
-}
+import "./libraries/Math.sol";
 
 /**
  * @title Gauge Controller
@@ -553,14 +549,14 @@ contract GaugeController is Ownable, IGaugeController {
     ) internal {
         // Remove slope changes for old slopes
         // Schedule recording of initial slope for next_time
-        pointsWeight[addr][nextTime].bias = max(_getWeight(addr) + newBias, oldBias) - oldBias;
-        pointsSum[gaugeType][nextTime].bias = max(_getSum(gaugeType) + newBias, oldBias) - oldBias;
+        pointsWeight[addr][nextTime].bias = Math.max(_getWeight(addr) + newBias, oldBias) - oldBias;
+        pointsSum[gaugeType][nextTime].bias = Math.max(_getSum(gaugeType) + newBias, oldBias) - oldBias;
         if (oldSlope.end > nextTime) {
             pointsWeight[addr][nextTime].slope =
-                max(pointsWeight[addr][nextTime].slope + newSlope.slope, oldSlope.slope) -
+                Math.max(pointsWeight[addr][nextTime].slope + newSlope.slope, oldSlope.slope) -
                 oldSlope.slope;
             pointsSum[gaugeType][nextTime].slope =
-                max(pointsSum[gaugeType][nextTime].slope + newSlope.slope, oldSlope.slope) -
+                Math.max(pointsSum[gaugeType][nextTime].slope + newSlope.slope, oldSlope.slope) -
                 oldSlope.slope;
         } else {
             pointsWeight[addr][nextTime].slope += newSlope.slope;

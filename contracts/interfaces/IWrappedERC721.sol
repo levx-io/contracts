@@ -6,12 +6,6 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 
 interface IWrappedERC721 is IERC165, IERC721, IERC721Metadata {
-    function PERMIT_TYPEHASH() external view returns (bytes32);
-
-    function PERMIT_ALL_TYPEHASH() external view returns (bytes32);
-
-    function DOMAIN_SEPARATOR() external view returns (bytes32);
-
     function nftContract() external view returns (address);
 
     function tokenURIRenderer() external view returns (address);
@@ -87,24 +81,6 @@ interface IWrappedERC721 is IERC165, IERC721, IERC721Metadata {
     function withdrawOffer(uint256 tokenId) external;
 
     function acceptOffer(uint256 tokenId, address maker) external;
-
-    function permit(
-        address spender,
-        uint256 tokenId,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external;
-
-    function permitAll(
-        address owner,
-        address spender,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external;
 
     event ListForSale(
         uint256 indexed tokenId,

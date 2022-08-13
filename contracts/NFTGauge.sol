@@ -7,11 +7,7 @@ import "./interfaces/IGaugeController.sol";
 import "./interfaces/IMinter.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./libraries/Tokens.sol";
-
-function _min(uint256 a, uint256 b) pure returns (uint256) {
-    if (a < b) return a;
-    return b;
-}
+import "./libraries/Math.sol";
 
 contract NFTGauge is WrappedERC721, INFTGauge {
     struct Snapshot {
@@ -134,7 +130,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         if (block.timestamp > _periodTime) {
             uint256 interval = _interval;
             uint256 prevWeekTime = _periodTime;
-            uint256 weekTime = _min(((_periodTime + interval) / interval) * interval, block.timestamp);
+            uint256 weekTime = Math.min(((_periodTime + interval) / interval) * interval, block.timestamp);
             for (uint256 i; i < 250; ) {
                 uint256 dt = weekTime - prevWeekTime;
                 uint256 w = IGaugeController(_controller).gaugeRelativeWeight(
@@ -159,7 +155,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
                 if (weekTime == block.timestamp) break;
                 prevWeekTime = weekTime;
-                weekTime = _min(weekTime + interval, block.timestamp);
+                weekTime = Math.min(weekTime + interval, block.timestamp);
 
                 unchecked {
                     ++i;
