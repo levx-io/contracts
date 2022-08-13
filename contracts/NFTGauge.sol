@@ -199,20 +199,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     /**
-     * @notice Mint a wrapped NFT
-     * @param tokenId Token Id to deposit
-     * @param dividendRatio Dividend ratio for the voters in bps (units of 0.01%)
-     * @param to The owner of the newly minted wrapped NFT
-     */
-    function wrap(
-        uint256 tokenId,
-        uint256 dividendRatio,
-        address to
-    ) external override {
-        wrap(tokenId, dividendRatio, to, 0);
-    }
-
-    /**
      * @notice Mint a wrapped NFT and commit gauge voting to this tokenId
      * @param tokenId Token Id to deposit
      * @param dividendRatio Dividend ratio for the voters in bps (units of 0.01%)

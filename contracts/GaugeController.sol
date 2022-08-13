@@ -4,7 +4,7 @@ pragma solidity ^0.8.14;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IGaugeController.sol";
 import "./interfaces/IVotingEscrow.sol";
-import "./interfaces/INFTGauge.sol";
+import "./interfaces/IGauge.sol";
 
 function max(uint256 a, uint256 b) pure returns (uint256) {
     if (a > b) return a;
@@ -255,7 +255,7 @@ contract GaugeController is Ownable, IGaugeController {
      * @param addr Gauge address
      */
     function killGauge(address addr) external override onlyOwner {
-        INFTGauge(addr).killMe();
+        IGauge(addr).killMe();
     }
 
     /**

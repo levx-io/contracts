@@ -2,8 +2,9 @@
 pragma solidity ^0.8.0;
 
 import "./IWrappedERC721.sol";
+import "./IGauge.sol";
 
-interface INFTGauge is IWrappedERC721 {
+interface INFTGauge is IWrappedERC721, IGauge {
     event Wrap(uint256 indexed tokenId, address indexed to);
     event Unwrap(uint256 indexed tokenId, address indexed to);
     event Vote(uint256 indexed tokenId, address indexed user, uint256 weight);
@@ -76,15 +77,7 @@ interface INFTGauge is IWrappedERC721 {
 
     function dividendsLength(address token, uint256 tokenId) external view returns (uint256);
 
-    function killMe() external;
-
     function userCheckpoint(uint256 tokenId, address user) external;
-
-    function wrap(
-        uint256 tokenId,
-        uint256 ratio,
-        address to
-    ) external;
 
     function wrap(
         uint256 tokenId,
