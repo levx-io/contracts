@@ -54,6 +54,10 @@ interface INFTGauge is IWrappedERC721 {
 
     function isKilled() external view returns (bool);
 
+    function userWeight(address user, uint256 tokenId) external view returns (uint256);
+
+    function userWeightSum(address user) external view returns (uint256);
+
     function points(uint256 tokenId, address user) external view returns (uint256);
 
     function pointsAt(
@@ -86,12 +90,12 @@ interface INFTGauge is IWrappedERC721 {
         uint256 tokenId,
         uint256 ratio,
         address to,
-        uint256 userWeight
+        uint256 _userWeight
     ) external;
 
     function unwrap(uint256 tokenId, address to) external;
 
-    function vote(uint256 tokenId, uint256 userWeight) external;
+    function vote(uint256 tokenId, uint256 _userWeight) external;
 
     function claimDividends(address token, uint256 tokenId) external;
 }

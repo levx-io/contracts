@@ -39,6 +39,9 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     bool public override isKilled;
 
+    mapping(address => mapping(uint256 => uint256)) public override userWeight;
+    mapping(address => uint256) public override userWeightSum;
+
     uint256 internal _interval;
 
     mapping(uint256 => uint256) internal _nonces; // tokenId -> nonce
@@ -214,13 +217,13 @@ contract NFTGauge is WrappedERC721, INFTGauge {
      * @param tokenId Token Id to deposit
      * @param dividendRatio Dividend ratio for the voters in bps (units of 0.01%)
      * @param to The owner of the newly minted wrapped NFT
-     * @param userWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
+     * @param _userWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
      */
     function wrap(
         uint256 tokenId,
         uint256 dividendRatio,
         address to,
-        uint256 userWeight
+        uint256 _userWeight
     ) public override {
         require(dividendRatio <= 10000, "NFTG: INVALID_RATIO");
 
@@ -228,7 +231,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         _mint(to, tokenId);
 
-        vote(tokenId, userWeight);
+        vote(tokenId, _userWeight);
 
         emit Wrap(tokenId, to);
 
@@ -251,23 +254,28 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         IERC721(nftContract).safeTransferFrom(address(this), to, tokenId);
     }
 
-    function vote(uint256 tokenId, uint256 userWeight) public override {
+    function vote(uint256 tokenId, uint256 _userWeight) public override {
         require(_exists(tokenId), "NFTG: NON_EXISTENT");
 
-        uint256 balance = IVotingEscrow(votingEscrow).balanceOf(msg.sender);
-        uint256 pointNew = (balance * userWeight) / 10000;
-        uint256 pointOld = points(tokenId, msg.sender);
-
         userCheckpoint(tokenId, msg.sender);
+
+        uint256 balance = IVotingEscrow(votingEscrow).balanceOf(msg.sender);
+        uint256 pointNew = (balance * _userWeight) / 10000;
+        uint256 pointOld = points(tokenId, msg.sender);
 
         uint256 nonce = _nonces[tokenId];
         _updateValueAtNow(_points[tokenId][nonce][msg.sender], pointNew);
         _updateValueAtNow(_pointsSum[tokenId][nonce], _lastValue(_pointsSum[tokenId][nonce]) + pointNew - pointOld);
         _updateValueAtNow(_pointsTotal, _lastValue(_pointsTotal) + pointNew - pointOld);
 
-        IGaugeController(controller).voteForGaugeWeights(msg.sender, userWeight);
+        uint256 userWeightOld = userWeight[msg.sender][tokenId];
+        uint256 _userWeightSum = userWeightSum[msg.sender] + _userWeight - userWeightOld;
+        userWeight[msg.sender][tokenId] = _userWeight;
+        userWeightSum[msg.sender] = _userWeightSum;
 
-        emit Vote(tokenId, msg.sender, userWeight);
+        IGaugeController(controller).voteForGaugeWeights(msg.sender, _userWeightSum);
+
+        emit Vote(tokenId, msg.sender, _userWeight);
     }
 
     function claimDividends(address token, uint256 tokenId) external override {
