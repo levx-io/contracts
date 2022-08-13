@@ -184,8 +184,9 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 oldIntegrateInvSupply = integrateInvSupply[userPeriod];
         uint256 dIntegrate = _integrateInvSupply - oldIntegrateInvSupply;
         if (dIntegrate > 0) {
-            uint256 sum = _lastValue(_pointsSum[tokenId][_nonces[tokenId]]);
-            uint256 pt = _lastValue(_points[tokenId][_nonces[tokenId]][user]);
+            uint256 nonce = _nonces[tokenId];
+            uint256 sum = _lastValue(_pointsSum[tokenId][nonce]);
+            uint256 pt = _lastValue(_points[tokenId][nonce][user]);
             integrateFraction[tokenId][user] += (pt * dIntegrate * 2) / 3 / 1e18; // 67% goes to voters
             if (ownerOf(tokenId) == user) {
                 integrateFraction[tokenId][user] += (sum * dIntegrate) / 3 / 1e18; // 33% goes to the owner
@@ -259,11 +260,9 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         userCheckpoint(tokenId, msg.sender);
 
-        _updateValueAtNow(_points[tokenId][_nonces[tokenId]][msg.sender], pointNew);
-        _updateValueAtNow(
-            _pointsSum[tokenId][_nonces[tokenId]],
-            _lastValue(_pointsSum[tokenId][_nonces[tokenId]]) + pointNew - pointOld
-        );
+        uint256 nonce = _nonces[tokenId];
+        _updateValueAtNow(_points[tokenId][nonce][msg.sender], pointNew);
+        _updateValueAtNow(_pointsSum[tokenId][nonce], _lastValue(_pointsSum[tokenId][nonce]) + pointNew - pointOld);
         _updateValueAtNow(_pointsTotal, _lastValue(_pointsTotal) + pointNew - pointOld);
 
         IGaugeController(controller).voteForGaugeWeights(msg.sender, userWeight);
