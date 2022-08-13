@@ -41,8 +41,9 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     uint256 internal _interval;
 
-    mapping(uint256 => mapping(address => Snapshot[])) internal _points;
-    mapping(uint256 => Snapshot[]) internal _pointsSum;
+    mapping(uint256 => uint256) internal _nonces; // tokenId -> nonce
+    mapping(uint256 => mapping(uint256 => mapping(address => Snapshot[]))) internal _points; // tokenId -> nonce -> user -> Snapshot
+    mapping(uint256 => mapping(uint256 => Snapshot[])) internal _pointsSum; // tokenId -> nonce -> Snapshot
     Snapshot[] internal _pointsTotal;
 
     function initialize(
@@ -62,8 +63,12 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         _interval = IGaugeController(_controller).interval();
     }
 
+    function integrateCheckpoint() external view override returns (uint256) {
+        return periodTimestamp[period];
+    }
+
     function points(uint256 tokenId, address user) public view override returns (uint256) {
-        return _lastValue(_points[tokenId][user]);
+        return _lastValue(_points[tokenId][_nonces[tokenId]][user]);
     }
 
     function pointsAt(
@@ -71,15 +76,15 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         address user,
         uint256 timestamp
     ) public view override returns (uint256) {
-        return _getValueAt(_points[tokenId][user], timestamp);
+        return _getValueAt(_points[tokenId][_nonces[tokenId]][user], timestamp);
     }
 
     function pointsSum(uint256 tokenId) external view override returns (uint256) {
-        return _lastValue(_pointsSum[tokenId]);
+        return _lastValue(_pointsSum[tokenId][_nonces[tokenId]]);
     }
 
     function pointsSumAt(uint256 tokenId, uint256 timestamp) public view override returns (uint256) {
-        return _getValueAt(_pointsSum[tokenId], timestamp);
+        return _getValueAt(_pointsSum[tokenId][_nonces[tokenId]], timestamp);
     }
 
     function pointsTotal() external view override returns (uint256) {
@@ -179,8 +184,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 oldIntegrateInvSupply = integrateInvSupply[userPeriod];
         uint256 dIntegrate = _integrateInvSupply - oldIntegrateInvSupply;
         if (dIntegrate > 0) {
-            uint256 sum = _lastValue(_pointsSum[tokenId]);
-            uint256 pt = _lastValue(_points[tokenId][user]);
+            uint256 sum = _lastValue(_pointsSum[tokenId][_nonces[tokenId]]);
+            uint256 pt = _lastValue(_points[tokenId][_nonces[tokenId]][user]);
             integrateFraction[tokenId][user] += (pt * dIntegrate * 2) / 3 / 1e18; // 67% goes to voters
             if (ownerOf(tokenId) == user) {
                 integrateFraction[tokenId][user] += (sum * dIntegrate) / 3 / 1e18; // 33% goes to the owner
@@ -234,9 +239,11 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         dividendRatios[tokenId] = 0;
 
-        vote(tokenId, 0);
-
         _burn(tokenId);
+
+        uint256 nonce = _nonces[tokenId];
+        _updateValueAtNow(_pointsTotal, _lastValue(_pointsTotal) - _lastValue(_pointsSum[tokenId][nonce]));
+        _nonces[tokenId] = nonce + 1;
 
         emit Unwrap(tokenId, to);
 
@@ -252,8 +259,11 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         userCheckpoint(tokenId, msg.sender);
 
-        _updateValueAtNow(_points[tokenId][msg.sender], pointNew);
-        _updateValueAtNow(_pointsSum[tokenId], _lastValue(_pointsSum[tokenId]) + pointNew - pointOld);
+        _updateValueAtNow(_points[tokenId][_nonces[tokenId]][msg.sender], pointNew);
+        _updateValueAtNow(
+            _pointsSum[tokenId][_nonces[tokenId]],
+            _lastValue(_pointsSum[tokenId][_nonces[tokenId]]) + pointNew - pointOld
+        );
         _updateValueAtNow(_pointsTotal, _lastValue(_pointsTotal) + pointNew - pointOld);
 
         IGaugeController(controller).voteForGaugeWeights(msg.sender, userWeight);
@@ -270,7 +280,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
             if (id >= dividends[token][tokenId].length) break;
 
             Snapshot memory dividend = dividends[token][tokenId][id];
-            uint256 pt = _getValueAt(_points[tokenId][msg.sender], dividend.timestamp);
+            uint256 pt = _getValueAt(_points[tokenId][_nonces[tokenId]][msg.sender], dividend.timestamp);
             if (pt > 0) {
                 amount += (pt * uint256(dividend.value)) / 1e18;
             }
@@ -350,7 +360,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         }
 
         uint256 dividend;
-        uint256 sum = _lastValue(_pointsSum[tokenId]);
+        uint256 sum = _lastValue(_pointsSum[tokenId][_nonces[tokenId]]);
         if (sum > 0) {
             dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
             dividends[currency][tokenId].push(Snapshot(uint64(block.timestamp), uint192((dividend * 1e18) / sum)));

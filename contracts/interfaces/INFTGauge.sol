@@ -38,6 +38,8 @@ interface INFTGauge is IWrappedERC721 {
         address user
     ) external view returns (uint256);
 
+    function integrateCheckpoint() external view returns (uint256);
+
     function period() external view returns (int128);
 
     function periodTimestamp(int128 period) external view returns (uint256);
