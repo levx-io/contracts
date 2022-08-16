@@ -36,9 +36,6 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     mapping(uint256 => mapping(address => Bid_)) public override currentBids;
     mapping(uint256 => mapping(address => Order)) public override offers;
 
-    mapping(uint256 => uint256) public nonces;
-    mapping(address => uint256) public noncesForAll;
-
     function __WrappedERC721_init(address _nftContract, address _tokenURIRenderer) internal initializer {
         nftContract = _nftContract;
         tokenURIRenderer = _tokenURIRenderer;
@@ -129,7 +126,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         require(sale.price == price, "WERC721: INVALID_PRICE");
         require(!sale.auction, "WERC721: BID_REQUIRED");
 
-        _transfer(owner, msg.sender, tokenId);
+        _safeTransfer(owner, msg.sender, tokenId);
 
         currency = sale.currency;
         emit Buy(tokenId, owner, msg.sender, price, currency);
@@ -249,7 +246,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         require(block.timestamp <= offer.deadline, "WERC721: EXPIRED");
 
         delete offers[tokenId][maker];
-        _transfer(msg.sender, maker, tokenId);
+        _safeTransfer(msg.sender, maker, tokenId);
 
         _settle(tokenId, offer.currency, msg.sender, offer.price);
 
