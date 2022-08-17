@@ -6,11 +6,14 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 import "./base/CloneFactory.sol";
 import "./interfaces/INFTGaugeFactory.sol";
+import "./libraries/Integers.sol";
 import "./libraries/Tokens.sol";
 import "./NFTGauge.sol";
 
 contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     using SafeERC20 for IERC20;
+    using Integers for int128;
+    using Integers for uint256;
 
     struct Fee {
         uint64 timestamp;
@@ -30,7 +33,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     mapping(address => bool) public override isGauge;
 
     mapping(address => Fee[]) public override fees;
-    mapping(address => mapping(address => uint256)) public override feesClaimed;
+    mapping(address => mapping(address => uint256)) public override lastFeeClaimed;
 
     constructor(
         address _tokenURIRenderer,
@@ -117,32 +120,34 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         emit DistributeFees(token, fees[token].length - 1, amount);
     }
 
-    function claimFees(
-        address token,
-        uint256 from,
-        uint256 to
-    ) external override {
-        require(from > feesClaimed[token][msg.sender], "NFTGF: INVALID_FROM");
+    /**
+     * @notice Claim accumulated fees
+     * @param token In which currency fees were paid
+     * @param to the last index of the fee (exclusive)
+     */
+    function claimFees(address token, uint256 to) external override {
+        uint256 from = lastFeeClaimed[token][msg.sender];
 
         (int128 value, , uint256 start, ) = IVotingEscrow(votingEscrow).locked(msg.sender);
         require(value > 0, "NFTGF: LOCK_NOT_FOUND");
-        require(start <= fees[token][from].timestamp, "NFTGF: FROM_TIMESTAMP_TOO_EARLY");
 
         uint256 epoch = IVotingEscrow(votingEscrow).userPointEpoch(msg.sender);
         (int128 bias, int128 slope, uint256 ts, ) = IVotingEscrow(votingEscrow).userPointHistory(msg.sender, epoch);
 
         uint256 amount;
-        for (uint256 i = from; i <= to; ) {
+        for (uint256 i = from; i < to; ) {
             Fee memory fee = fees[token][i];
-            int128 balance = bias - slope * int128(int256(uint256(fee.timestamp) - ts));
-            if (balance > 0) {
-                amount += (uint256(uint128(balance)) * uint256(fee.amountPerShare)) / 1e18;
+            if (start < fee.timestamp) {
+                int128 balance = bias - slope * (uint256(fee.timestamp) - ts).toInt128();
+                if (balance > 0) {
+                    amount += (balance.toUint256() * uint256(fee.amountPerShare)) / 1e18;
+                }
             }
             unchecked {
                 ++i;
             }
         }
-        feesClaimed[token][msg.sender] = to;
+        lastFeeClaimed[token][msg.sender] = to;
 
         emit ClaimFees(token, amount, msg.sender);
         Tokens.transfer(token, msg.sender, amount);

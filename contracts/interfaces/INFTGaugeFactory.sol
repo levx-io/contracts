@@ -29,7 +29,7 @@ interface INFTGaugeFactory {
 
     function fees(address token, uint256 id) external view returns (uint64 timestamp, uint192 amountPerShare);
 
-    function feesClaimed(address token, address user) external view returns (uint256);
+    function lastFeeClaimed(address token, address user) external view returns (uint256);
 
     function feesLength(address token) external view returns (uint256);
 
@@ -51,9 +51,5 @@ interface INFTGaugeFactory {
 
     function distributeFees(address token, uint256 amount) external returns (uint256 amountFee);
 
-    function claimFees(
-        address token,
-        uint256 from,
-        uint256 to
-    ) external;
+    function claimFees(address token, uint256 to) external;
 }
