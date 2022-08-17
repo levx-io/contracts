@@ -126,7 +126,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         require(sale.price == price, "WERC721: INVALID_PRICE");
         require(!sale.auction, "WERC721: BID_REQUIRED");
 
-        _safeTransfer(owner, msg.sender, tokenId);
+        _safeTransfer(owner, msg.sender, tokenId, "0x");
 
         currency = sale.currency;
         emit Buy(tokenId, owner, msg.sender, price, currency);
@@ -246,7 +246,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         require(block.timestamp <= offer.deadline, "WERC721: EXPIRED");
 
         delete offers[tokenId][maker];
-        _safeTransfer(msg.sender, maker, tokenId);
+        _safeTransfer(msg.sender, maker, tokenId, "0x");
 
         _settle(tokenId, offer.currency, msg.sender, offer.price);
 
