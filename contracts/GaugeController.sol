@@ -431,26 +431,38 @@ contract GaugeController is Ownable, IGaugeController {
         if (t > block.timestamp) t -= _interval;
         uint256 pt = pointsTotal[t];
 
-        for (int128 gaugeType; gaugeType < 100; gaugeType++) {
+        for (int128 gaugeType; gaugeType < 100; ) {
             if (gaugeType == nGaugeTypes) break;
             _getSum(gaugeType);
             _getTypeWeight(gaugeType);
+
+            unchecked {
+                ++gaugeType;
+            }
         }
 
-        for (uint256 i; i < 500; i++) {
+        for (uint256 i; i < 500; ) {
             if (t > block.timestamp) break;
             t += _interval;
             pt = 0;
             // Scales as n_types * n_unchecked_weeks (hopefully 1 at most)
-            for (int128 gaugeType; gaugeType < 100; gaugeType++) {
+            for (int128 gaugeType; gaugeType < 100; ) {
                 if (gaugeType == nGaugeTypes) break;
                 uint256 typeSum = pointsSum[gaugeType][t].bias;
                 uint256 typeWeight = pointsTypeWeight[gaugeType][t];
                 pt += typeSum * typeWeight;
+
+                unchecked {
+                    ++gaugeType;
+                }
             }
             pointsTotal[t] = pt;
 
             if (t > block.timestamp) timeTotal = t;
+
+            unchecked {
+                ++i;
+            }
         }
         return pt;
     }
@@ -466,7 +478,7 @@ contract GaugeController is Ownable, IGaugeController {
         if (t > 0) {
             Point memory pt = pointsSum[gaugeType][t];
             uint256 _interval = interval;
-            for (uint256 i; i < 500; i++) {
+            for (uint256 i; i < 500; ) {
                 if (t > block.timestamp) break;
                 t += _interval;
                 uint256 dBias = pt.slope * _interval;
@@ -480,6 +492,10 @@ contract GaugeController is Ownable, IGaugeController {
                 }
                 pointsSum[gaugeType][t] = pt;
                 if (t > block.timestamp) timeSum[gaugeType] = t;
+
+                unchecked {
+                    ++i;
+                }
             }
             return pt.bias;
         } else return 0;
@@ -496,11 +512,15 @@ contract GaugeController is Ownable, IGaugeController {
         if (t > 0) {
             uint256 w = pointsTypeWeight[gaugeType][t];
             uint256 _interval = interval;
-            for (uint256 i; i < 500; i++) {
+            for (uint256 i; i < 500; ) {
                 if (t > block.timestamp) break;
                 t += _interval;
                 pointsTypeWeight[gaugeType][t] = w;
                 if (t > block.timestamp) timeTypeWeight[gaugeType] = t;
+
+                unchecked {
+                    ++i;
+                }
             }
             return w;
         } else return 0;
@@ -517,7 +537,7 @@ contract GaugeController is Ownable, IGaugeController {
         if (t > 0) {
             Point memory pt = pointsWeight[addr][t];
             uint256 _interval = interval;
-            for (uint256 i; i < 500; i++) {
+            for (uint256 i; i < 500; ) {
                 if (t > block.timestamp) break;
                 t += _interval;
                 uint256 dBias = pt.slope * _interval;
@@ -531,6 +551,10 @@ contract GaugeController is Ownable, IGaugeController {
                 }
                 pointsWeight[addr][t] = pt;
                 if (t > block.timestamp) timeWeight[addr] = t;
+
+                unchecked {
+                    ++i;
+                }
             }
             return pt.bias;
         } else return 0;
