@@ -76,10 +76,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     ) external override {
         require(block.timestamp < deadline, "WERC721: INVALID_DEADLINE");
         require(ownerOf(tokenId) == msg.sender, "WERC721: FORBIDDEN");
-        require(
-            currency == address(0) || INFTGaugeFactory(factory).tokenWhitelisted(currency),
-            "WERC721: INVALID_CURRENCY"
-        );
+        require(currency == address(0), "WERC721: INVALID_CURRENCY");
 
         sales[tokenId][msg.sender] = Order(price, currency, deadline, auction);
 

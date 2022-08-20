@@ -242,7 +242,10 @@ contract GaugeController is Ownable, IGaugeController {
      * @param addr Gauge address
      * @param weight New Gauge weight
      */
-    function changeGaugeWeight(address addr, uint256 weight) external override onlyOwner {
+    function changeGaugeWeight(address addr, uint256 weight) external override {
+        int128 gaugeType = _gaugeTypes[msg.sender] - 1;
+        require(gaugeType >= 0, "GC: GAUGE_NOT_ADDED");
+
         _changeGaugeWeight(addr, weight);
     }
 

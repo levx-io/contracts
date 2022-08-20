@@ -6,6 +6,7 @@ import "./interfaces/INFTGauge.sol";
 import "./interfaces/IGaugeController.sol";
 import "./interfaces/IMinter.sol";
 import "./interfaces/IVotingEscrow.sol";
+import "./interfaces/ICurrencyConverter.sol";
 import "./libraries/Tokens.sol";
 import "./libraries/Math.sol";
 
@@ -341,11 +342,20 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         address to,
         uint256 amount
     ) internal override {
+        address _factory = factory;
+        address converter = INFTGaugeFactory(_factory).currencyConverter(currency);
+        uint256 amountETH = ICurrencyConverter(converter).getAmountETH(amount);
+        if (amountETH >= 1e18) {
+            address _controller = controller;
+            uint256 weight = IGaugeController(_controller).getGaugeWeight(address(this));
+            IGaugeController(_controller).changeGaugeWeight(address(this), weight + amountETH / 1e18);
+        }
+
         uint256 fee;
         if (currency == address(0)) {
-            fee = INFTGaugeFactory(factory).distributeFeesETH{value: amount}();
+            fee = INFTGaugeFactory(_factory).distributeFeesETH{value: amount}();
         } else {
-            fee = INFTGaugeFactory(factory).distributeFees(currency, amount);
+            fee = INFTGaugeFactory(_factory).distributeFees(currency, amount);
         }
 
         uint256 dividend;
