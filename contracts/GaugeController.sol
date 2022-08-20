@@ -239,14 +239,10 @@ contract GaugeController is Ownable, IGaugeController {
 
     /**
      * @notice Change weight of gauge `addr` to `weight`
-     * @param addr Gauge address
-     * @param weight New Gauge weight
+     * @param increment Gauge weight to be increased
      */
-    function changeGaugeWeight(address addr, uint256 weight) external override {
-        int128 gaugeType = _gaugeTypes[msg.sender] - 1;
-        require(gaugeType >= 0, "GC: GAUGE_NOT_ADDED");
-
-        _changeGaugeWeight(addr, weight);
+    function increaseGaugeWeight(uint256 increment) external override {
+        _increaseGaugeWeight(increment);
     }
 
     /**
@@ -395,24 +391,23 @@ contract GaugeController is Ownable, IGaugeController {
 
     /**
      * @notice Change weight of gauge `addr` to `weight`
-     * @param addr Gauge address
-     * @param weight New Gauge weight
+     * @param increment Gauge weight to be increased
      */
-    function _changeGaugeWeight(address addr, uint256 weight) internal {
-        // Change gauge weight
-        // Only needed when testing in reality
-        int128 gaugeType = _gaugeTypes[addr] - 1;
-        uint256 oldGaugeWeight = _getWeight(addr);
+    function _increaseGaugeWeight(uint256 increment) internal {
+        int128 gaugeType = _gaugeTypes[msg.sender] - 1;
+        require(gaugeType >= 0, "GC: GAUGE_NOT_ADDED");
+
+        uint256 oldGaugeWeight = _getWeight(msg.sender);
         uint256 typeWeight = _getTypeWeight(gaugeType);
         uint256 oldSum = _getSum(gaugeType);
         uint256 totalWeight = _getTotal();
         uint256 _interval = interval;
         uint256 nextTime = ((block.timestamp + _interval) / _interval) * _interval;
 
-        pointsWeight[addr][nextTime].bias = weight;
-        timeWeight[addr] = nextTime;
+        pointsWeight[msg.sender][nextTime].bias = oldGaugeWeight + increment;
+        timeWeight[msg.sender] = nextTime;
 
-        uint256 newSum = oldSum + weight - oldGaugeWeight;
+        uint256 newSum = oldSum + increment;
         pointsSum[gaugeType][nextTime].bias = newSum;
         timeSum[gaugeType] = nextTime;
 
@@ -420,7 +415,7 @@ contract GaugeController is Ownable, IGaugeController {
         pointsTotal[nextTime] = totalWeight;
         timeTotal = nextTime;
 
-        emit NewGaugeWeight(addr, block.timestamp, weight, totalWeight);
+        emit NewGaugeWeight(msg.sender, block.timestamp, oldGaugeWeight + increment, totalWeight);
     }
 
     /**

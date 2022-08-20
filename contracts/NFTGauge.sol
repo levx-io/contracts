@@ -346,9 +346,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         address converter = INFTGaugeFactory(_factory).currencyConverter(currency);
         uint256 amountETH = ICurrencyConverter(converter).getAmountETH(amount);
         if (amountETH >= 1e18) {
-            address _controller = controller;
-            uint256 weight = IGaugeController(_controller).getGaugeWeight(address(this));
-            IGaugeController(_controller).changeGaugeWeight(address(this), weight + amountETH / 1e18);
+            IGaugeController(controller).increaseGaugeWeight(amountETH / 1e18);
         }
 
         uint256 fee;

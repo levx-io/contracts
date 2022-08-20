@@ -79,7 +79,7 @@ interface IGaugeController {
         uint256 weight
     ) external;
 
-    function changeGaugeWeight(address addr, uint256 weight) external;
+    function increaseGaugeWeight(uint256 weight) external;
 
     function killGauge(address addr) external;
 
