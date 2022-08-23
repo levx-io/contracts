@@ -9,6 +9,7 @@ import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/ICurrencyConverter.sol";
 import "./libraries/Tokens.sol";
 import "./libraries/Math.sol";
+import "./libraries/NFTs.sol";
 
 contract NFTGauge is WrappedERC721, INFTGauge {
     struct Snapshot {
@@ -218,7 +219,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         emit Wrap(tokenId, to);
 
-        IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
+        NFTs.safeTransferFrom(nftContract, msg.sender, address(this), tokenId);
     }
 
     function unwrap(uint256 tokenId, address to) public override {
@@ -234,7 +235,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         emit Unwrap(tokenId, to);
 
-        IERC721(nftContract).safeTransferFrom(address(this), to, tokenId);
+        NFTs.safeTransferFrom(nftContract, address(this), to, tokenId);
     }
 
     function vote(uint256 tokenId, uint256 _userWeight) public override {

@@ -2,10 +2,10 @@
 pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "./interfaces/INFTGaugeFactory.sol";
 import "./interfaces/INFTGauge.sol";
 import "./interfaces/IVotingEscrow.sol";
+import "./libraries/NFTs.sol";
 
 contract EarlyAccess is Ownable {
     event AddCollection(address indexed collection);
@@ -46,7 +46,7 @@ contract EarlyAccess is Ownable {
         require(launchedAt == 0, "EA: LAUNCHED");
         require(collections[collection], "EA: COLLECTION_NOT_ALLOWED");
         for (uint256 i; i < tokenIds.length; i++) {
-            require(IERC721(collection).ownerOf(tokenIds[i]) == msg.sender, "EA: FORBIDDEN");
+            require(NFTs.ownerOf(collection, tokenIds[i]) == msg.sender, "EA: FORBIDDEN");
             whitelisted[collection][tokenIds[i]] = true;
         }
     }
@@ -59,7 +59,7 @@ contract EarlyAccess is Ownable {
         require(launchedAt > 0, "EA: NOT_LAUNCHED");
         require(whitelisted[collection][tokenId], "EA: NOT_WHITELISTED");
 
-        IERC721(collection).safeTransferFrom(msg.sender, address(this), tokenId);
+        NFTs.safeTransferFrom(collection, msg.sender, address(this), tokenId);
 
         address gauge = INFTGaugeFactory(factory).gauges(collection);
         INFTGauge(gauge).wrap(tokenId, dividendRatio, msg.sender, 0);
