@@ -11,8 +11,8 @@ contract EarlyAccess is Ownable {
     event AddCollection(address indexed collection);
     event WhitelistNFT(address indexed collection, uint256 tokenId);
 
-    uint256 public amount;
-    uint256 public limit;
+    uint256 public immutable amount;
+    uint256 public immutable limit;
     address public factory;
     address public votingEscrow;
     uint256 public maxDuration;
@@ -24,12 +24,6 @@ contract EarlyAccess is Ownable {
     mapping(address => mapping(uint256 => bool)) public wrapped;
 
     constructor(uint256 _amount, uint256 _limit) {
-        amount = _amount;
-        limit = _limit;
-    }
-
-    function updateParameters(uint256 _amount, uint256 _limit) external onlyOwner {
-        require(launchedAt == 0, "EA: LAUNCHED");
         amount = _amount;
         limit = _limit;
     }
