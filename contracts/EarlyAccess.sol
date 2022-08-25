@@ -11,19 +11,22 @@ contract EarlyAccess is Ownable {
     event AddCollection(address indexed collection);
     event WhitelistNFT(address indexed collection, uint256 tokenId);
 
-    address public immutable factory;
     uint256 public immutable amount;
-    address public immutable votingEscrow;
-    uint256 public immutable maxDuration;
+    address public factory;
+    address public votingEscrow;
+    uint256 public maxDuration;
 
     uint256 public launchedAt;
     mapping(address => bool) public collections;
     mapping(address => mapping(uint256 => bool)) public whitelisted;
     mapping(address => mapping(uint256 => bool)) public wrapped;
 
-    constructor(address _factory, uint256 _amount) {
-        factory = _factory;
+    constructor(uint256 _amount) {
         amount = _amount;
+    }
+
+    function setFactory(address _factory) external onlyOwner {
+        factory = _factory;
 
         votingEscrow = INFTGaugeFactory(_factory).votingEscrow();
         maxDuration = IVotingEscrow(_factory).maxDuration();
