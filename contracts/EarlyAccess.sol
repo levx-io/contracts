@@ -9,6 +9,7 @@ import "./libraries/NFTs.sol";
 
 contract EarlyAccess is Ownable {
     event AddCollection(address indexed collection);
+    event WhitelistNFT(address indexed collection, uint256 tokenId);
 
     address public immutable factory;
     uint256 public immutable amount;
@@ -18,7 +19,7 @@ contract EarlyAccess is Ownable {
     uint256 public launchedAt;
     mapping(address => bool) public collections;
     mapping(address => mapping(uint256 => bool)) public whitelisted;
-    mapping(address => mapping(uint256 => bool)) public claimed;
+    mapping(address => mapping(uint256 => bool)) public wrapped;
 
     constructor(address _factory, uint256 _amount) {
         factory = _factory;
@@ -48,6 +49,8 @@ contract EarlyAccess is Ownable {
         for (uint256 i; i < tokenIds.length; i++) {
             require(NFTs.ownerOf(collection, tokenIds[i]) == msg.sender, "EA: FORBIDDEN");
             whitelisted[collection][tokenIds[i]] = true;
+
+            emit WhitelistNFT(collection, tokenIds[i]);
         }
     }
 
@@ -58,6 +61,9 @@ contract EarlyAccess is Ownable {
     ) external {
         require(launchedAt > 0, "EA: NOT_LAUNCHED");
         require(whitelisted[collection][tokenId], "EA: NOT_WHITELISTED");
+        require(!wrapped[collection][tokenId], "EA: WRAPPED");
+
+        wrapped[collection][tokenId] = true;
 
         NFTs.safeTransferFrom(collection, msg.sender, address(this), tokenId);
 
