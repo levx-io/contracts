@@ -11,18 +11,27 @@ contract EarlyAccess is Ownable {
     event AddCollection(address indexed collection);
     event WhitelistNFT(address indexed collection, uint256 tokenId);
 
-    uint256 public immutable amount;
+    uint256 public amount;
+    uint256 public limit;
     address public factory;
     address public votingEscrow;
     uint256 public maxDuration;
 
+    uint256 public totalNumberWhitelisted;
     uint256 public launchedAt;
     mapping(address => bool) public collections;
     mapping(address => mapping(uint256 => bool)) public whitelisted;
     mapping(address => mapping(uint256 => bool)) public wrapped;
 
-    constructor(uint256 _amount) {
+    constructor(uint256 _amount, uint256 _limit) {
         amount = _amount;
+        limit = _limit;
+    }
+
+    function updateParameters(uint256 _amount, uint256 _limit) external onlyOwner {
+        require(launchedAt == 0, "EA: LAUNCHED");
+        amount = _amount;
+        limit = _limit;
     }
 
     function setFactory(address _factory) external onlyOwner {
@@ -49,12 +58,15 @@ contract EarlyAccess is Ownable {
     function whitelistNFTs(address collection, uint256[] calldata tokenIds) external {
         require(launchedAt == 0, "EA: LAUNCHED");
         require(collections[collection], "EA: COLLECTION_NOT_ALLOWED");
+        require(totalNumberWhitelisted + tokenIds.length <= limit, "EA: LIMIT_REACHED");
+
         for (uint256 i; i < tokenIds.length; i++) {
             require(NFTs.ownerOf(collection, tokenIds[i]) == msg.sender, "EA: FORBIDDEN");
             whitelisted[collection][tokenIds[i]] = true;
 
             emit WhitelistNFT(collection, tokenIds[i]);
         }
+        totalNumberWhitelisted += tokenIds.length;
     }
 
     function wrapNFT(
