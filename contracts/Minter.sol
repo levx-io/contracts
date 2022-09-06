@@ -20,10 +20,13 @@ contract Minter is IMinter {
     uint256 public immutable override rateReductionTime;
     uint256 public immutable override rateReductionCoefficient;
 
+    address public override treasury;
     int128 public override miningEpoch;
     uint256 public override startEpochTime;
     uint256 public override rate;
 
+    uint256 public override mintedTotal;
+    uint256 public override mintedForTreasury;
     mapping(address => mapping(uint256 => mapping(address => uint256))) public override minted; // gauge -> tokenId -> user -> amount
 
     uint256 internal startEpochSupply;
@@ -34,7 +37,8 @@ contract Minter is IMinter {
         uint256 _initialSupply,
         uint256 _initialRate,
         uint256 _rateReductionTime,
-        uint256 _rateReductionCoefficient
+        uint256 _rateReductionCoefficient,
+        address _treasury
     ) {
         token = _token;
         controller = _controller;
@@ -42,6 +46,7 @@ contract Minter is IMinter {
         initialRate = _initialRate;
         rateReductionTime = _rateReductionTime;
         rateReductionCoefficient = _rateReductionCoefficient;
+        treasury = _treasury;
 
         startEpochTime = block.timestamp + INFLATION_DELAY - rateReductionTime;
         miningEpoch = -1;
@@ -103,6 +108,11 @@ contract Minter is IMinter {
         return toMint;
     }
 
+    function updateTreasury(address newTreasury) external override {
+        require(msg.sender == treasury, "MT: FORBIDDEN");
+        treasury = newTreasury;
+    }
+
     /**
      * @notice Update mining rate and supply at the start of the epoch
      * @dev Callable by any address, but only once per epoch
@@ -148,15 +158,26 @@ contract Minter is IMinter {
         require(IGaugeController(controller).gaugeTypes(gaugeAddr) >= 0, "MT: GAUGE_NOT_ADDED");
 
         INFTGauge(gaugeAddr).userCheckpoint(tokenId, msg.sender);
-        uint256 total = INFTGauge(gaugeAddr).integrateFraction(tokenId, msg.sender);
+        uint256 totalMint = INFTGauge(gaugeAddr).integrateFraction(tokenId, msg.sender);
+        uint256 toMint = totalMint - minted[gaugeAddr][tokenId][msg.sender];
+        require(toMint > 0, "MT: NO_AMOUNT_TO_MINT");
 
-        uint256 _minted = minted[gaugeAddr][tokenId][msg.sender];
-        if (total > _minted) {
-            minted[gaugeAddr][tokenId][msg.sender] = total;
+        mintedTotal += toMint;
+        minted[gaugeAddr][tokenId][msg.sender] = totalMint;
 
-            emit Minted(msg.sender, gaugeAddr, tokenId, total - _minted);
-            IToken(token).mint(msg.sender, total - _minted);
-        }
+        emit Minted(msg.sender, gaugeAddr, tokenId, totalMint);
+        IToken(token).mint(msg.sender, toMint);
+    }
+
+    function mintForTreasury() external override {
+        uint256 totalMint = mintedTotal / 10;
+        uint256 toMint = totalMint - mintedForTreasury;
+        require(toMint > 0, "MT: NO_AMOUNT_TO_MINT");
+
+        mintedForTreasury = totalMint;
+
+        emit MintedForTreasury(treasury, totalMint);
+        IToken(token).mint(treasury, toMint);
     }
 
     function _availableSupply() internal view returns (uint256) {
