@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 
 import "../base/ERC721Initializable.sol";
 import "../interfaces/IWrappedERC721.sol";
-import "../interfaces/ITokenURIRenderer.sol";
 import "../interfaces/INFTGaugeFactory.sol";
 import "../libraries/Signature.sol";
 import "../libraries/Tokens.sol";
@@ -29,16 +28,14 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     }
 
     address public override nftContract;
-    address public override tokenURIRenderer;
     address public override factory;
 
     mapping(uint256 => mapping(address => Order)) public override sales;
     mapping(uint256 => mapping(address => Bid_)) public override currentBids;
     mapping(uint256 => mapping(address => Order)) public override offers;
 
-    function __WrappedERC721_init(address _nftContract, address _tokenURIRenderer) internal initializer {
+    function __WrappedERC721_init(address _nftContract) internal initializer {
         nftContract = _nftContract;
-        tokenURIRenderer = _tokenURIRenderer;
         factory = msg.sender;
 
         string memory name;
@@ -64,7 +61,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     {
         require(_exists(tokenId), "WERC721: TOKEN_NON_EXISTENT");
 
-        return ITokenURIRenderer(tokenURIRenderer).render(nftContract, tokenId);
+        return IERC721Metadata(nftContract).tokenURI(tokenId);
     }
 
     function listForSale(

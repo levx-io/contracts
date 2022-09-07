@@ -11,11 +11,7 @@ interface INFTGauge is IWrappedERC721, IGauge {
     event DistributeDividend(address indexed token, uint256 indexed tokenId, uint256 amount);
     event ClaimDividends(address indexed token, uint256 indexed tokenId, uint256 amount, address indexed to);
 
-    function initialize(
-        address _nftContract,
-        address _tokenURIRenderer,
-        address _minter
-    ) external;
+    function initialize(address _nftContract, address _minter) external;
 
     function controller() external view returns (address);
 

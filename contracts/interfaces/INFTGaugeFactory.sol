@@ -9,8 +9,6 @@ interface INFTGaugeFactory {
     event DistributeFees(address indexed token, uint256 indexed id, uint256 amount);
     event ClaimFees(address indexed token, uint256 amount, address indexed to);
 
-    function tokenURIRenderer() external view returns (address);
-
     function minter() external view returns (address);
 
     function votingEscrow() external view returns (address);

@@ -47,12 +47,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     mapping(uint256 => mapping(uint256 => Snapshot[])) internal _pointsSum; // tokenId -> nonce -> Snapshot
     Snapshot[] internal _pointsTotal;
 
-    function initialize(
-        address _nftContract,
-        address _tokenURIRenderer,
-        address _minter
-    ) external override initializer {
-        __WrappedERC721_init(_nftContract, _tokenURIRenderer);
+    function initialize(address _nftContract, address _minter) external override initializer {
+        __WrappedERC721_init(_nftContract);
 
         minter = _minter;
         address _controller = IMinter(_minter).controller();
