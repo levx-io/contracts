@@ -21,6 +21,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
 
     address public immutable override minter;
     address public immutable override votingEscrow;
+    address public immutable override discountToken;
 
     address public override target;
     uint256 public override targetVersion;
@@ -33,9 +34,14 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     mapping(address => Fee[]) public override fees;
     mapping(address => mapping(address => uint256)) public override lastFeeClaimed;
 
-    constructor(address _minter, uint256 _feeRatio) {
+    constructor(
+        address _minter,
+        address _discountToken,
+        uint256 _feeRatio
+    ) {
         minter = _minter;
         votingEscrow = IGaugeController(IMinter(_minter).controller()).votingEscrow();
+        discountToken = _discountToken;
         feeRatio = _feeRatio;
 
         emit UpdateFeeRatio(_feeRatio);
@@ -100,6 +106,9 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
 
     function distributeFees(address token, uint256 amount) external override returns (uint256 amountFee) {
         amountFee = (amount * feeRatio) / 10000;
+        if (token == discountToken) {
+            amountFee /= 2;
+        }
         _distributeFees(token, amountFee);
     }
 

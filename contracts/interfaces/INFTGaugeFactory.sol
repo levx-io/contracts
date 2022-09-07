@@ -13,6 +13,8 @@ interface INFTGaugeFactory {
 
     function votingEscrow() external view returns (address);
 
+    function discountToken() external view returns (address);
+
     function target() external view returns (address);
 
     function targetVersion() external view returns (uint256);
