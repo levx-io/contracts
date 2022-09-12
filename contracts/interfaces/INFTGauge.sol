@@ -47,29 +47,20 @@ interface INFTGauge is IWrappedERC721, IGauge {
 
     function integrateFraction(uint256 tokenId, address user) external view returns (uint256);
 
+    function voteUserSlopes(uint256 tokenId, address user)
+        external
+        view
+        returns (
+            uint256 slope,
+            uint256 power,
+            uint256 end
+        );
+
+    function voteUserPower(address user) external view returns (uint256);
+
     function inflationRate() external view returns (uint256);
 
     function isKilled() external view returns (bool);
-
-    function userWeight(address user, uint256 tokenId) external view returns (uint256);
-
-    function userWeightSum(address user) external view returns (uint256);
-
-    function points(uint256 tokenId, address user) external view returns (uint256);
-
-    function pointsAt(
-        uint256 tokenId,
-        address user,
-        uint256 _block
-    ) external view returns (uint256);
-
-    function pointsSum(uint256 tokenId) external view returns (uint256);
-
-    function pointsSumAt(uint256 tokenId, uint256 _block) external view returns (uint256);
-
-    function pointsTotal() external view returns (uint256);
-
-    function pointsTotalAt(uint256 _block) external view returns (uint256);
 
     function dividendsLength(address token, uint256 tokenId) external view returns (uint256);
 
@@ -79,12 +70,14 @@ interface INFTGauge is IWrappedERC721, IGauge {
         uint256 tokenId,
         uint256 ratio,
         address to,
-        uint256 _userWeight
+        uint256 userWeight
     ) external;
 
     function unwrap(uint256 tokenId, address to) external;
 
-    function vote(uint256 tokenId, uint256 _userWeight) external;
+    function vote(uint256 tokenId, uint256 userWeight) external;
+
+    function revoke(uint256 tokenId) external;
 
     function claimDividends(address token, uint256 tokenId) external;
 }

@@ -12,9 +12,15 @@ import "./libraries/Math.sol";
 import "./libraries/NFTs.sol";
 
 contract NFTGauge is WrappedERC721, INFTGauge {
-    struct Snapshot {
+    struct Dividend {
         uint64 timestamp;
         uint192 value;
+    }
+
+    struct VotedSlope {
+        uint256 slope;
+        uint256 power;
+        uint256 end;
     }
 
     address public override minter;
@@ -23,7 +29,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     uint256 public override futureEpochTime;
 
     mapping(uint256 => uint256) public override dividendRatios;
-    mapping(address => mapping(uint256 => Snapshot[])) public override dividends; // currency -> tokenId -> Snapshot
+    mapping(address => mapping(uint256 => Dividend[])) public override dividends; // currency -> tokenId -> Snapshot
     mapping(address => mapping(uint256 => mapping(address => uint256))) public override lastDividendClaimed; // currency -> tokenId -> user -> index
 
     int128 public override period;
@@ -33,19 +39,14 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     mapping(uint256 => mapping(address => int128)) public override periodOf; // tokenId -> user -> period
     mapping(uint256 => mapping(address => uint256)) public override integrateFraction; // tokenId -> user -> fraction
 
+    mapping(uint256 => mapping(address => VotedSlope)) public override voteUserSlopes; // user -> tokenId -> VotedSlope
+    mapping(address => uint256) public override voteUserPower; // Total vote power used by user
+
     uint256 public override inflationRate;
 
     bool public override isKilled;
 
-    mapping(address => mapping(uint256 => uint256)) public override userWeight;
-    mapping(address => uint256) public override userWeightSum;
-
     uint256 internal _interval;
-
-    mapping(uint256 => uint256) internal _nonces; // tokenId -> nonce
-    mapping(uint256 => mapping(uint256 => mapping(address => Snapshot[]))) internal _points; // tokenId -> nonce -> user -> Snapshot
-    mapping(uint256 => mapping(uint256 => Snapshot[])) internal _pointsSum; // tokenId -> nonce -> Snapshot
-    Snapshot[] internal _pointsTotal;
 
     function initialize(address _nftContract, address _minter) external override initializer {
         __WrappedERC721_init(_nftContract);
@@ -62,34 +63,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     function integrateCheckpoint() external view override returns (uint256) {
         return periodTimestamp[period];
-    }
-
-    function points(uint256 tokenId, address user) public view override returns (uint256) {
-        return _lastValue(_points[tokenId][_nonces[tokenId]][user]);
-    }
-
-    function pointsAt(
-        uint256 tokenId,
-        address user,
-        uint256 timestamp
-    ) public view override returns (uint256) {
-        return _getValueAt(_points[tokenId][_nonces[tokenId]][user], timestamp);
-    }
-
-    function pointsSum(uint256 tokenId) external view override returns (uint256) {
-        return _lastValue(_pointsSum[tokenId][_nonces[tokenId]]);
-    }
-
-    function pointsSumAt(uint256 tokenId, uint256 timestamp) public view override returns (uint256) {
-        return _getValueAt(_pointsSum[tokenId][_nonces[tokenId]], timestamp);
-    }
-
-    function pointsTotal() external view override returns (uint256) {
-        return _lastValue(_pointsTotal);
-    }
-
-    function pointsTotalAt(uint256 timestamp) external view override returns (uint256) {
-        return _getValueAt(_pointsTotal, timestamp);
     }
 
     function dividendsLength(address token, uint256 tokenId) external view override returns (uint256) {
@@ -120,30 +93,27 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         }
         IGaugeController(_controller).checkpointGauge(address(this));
 
-        uint256 total = _lastValue(_pointsTotal);
-
         if (isKilled) rate = 0; // Stop distributing inflation as soon as killed
 
         // Update integral of 1/total
         if (block.timestamp > _periodTime) {
             uint256 interval = _interval;
-            uint256 prevWeekTime = _periodTime;
+            uint256 prevTime = _periodTime;
             uint256 weekTime = Math.min(((_periodTime + interval) / interval) * interval, block.timestamp);
-            for (uint256 i; i < 250; ) {
-                uint256 dt = weekTime - prevWeekTime;
-                uint256 w = IGaugeController(_controller).gaugeRelativeWeight(
-                    address(this),
-                    (prevWeekTime / interval) * interval
-                );
+            for (uint256 i; i < 500; ) {
+                uint256 prevWeekTime = (prevTime / interval) * interval;
+                uint256 w = IGaugeController(_controller).gaugeRelativeWeight(address(this), prevWeekTime);
+                (uint256 total, ) = IGaugeController(_controller).pointsWeight(address(this), prevWeekTime);
 
+                uint256 dt = weekTime - prevTime;
                 if (total > 0) {
-                    if (prevFutureEpoch >= prevWeekTime && prevFutureEpoch < weekTime) {
+                    if (prevFutureEpoch >= prevTime && prevFutureEpoch < weekTime) {
                         // If we went across one or multiple epochs, apply the rate
                         // of the first epoch until it ends, and then the rate of
                         // the last epoch.
                         // If more than one epoch is crossed - the gauge gets less,
                         // but that'd meen it wasn't called for more than 1 year
-                        _integrateInvSupply += (rate * w * (prevFutureEpoch - prevWeekTime)) / total;
+                        _integrateInvSupply += (rate * w * (prevFutureEpoch - prevTime)) / total;
                         rate = newRate;
                         _integrateInvSupply += (rate * w * (weekTime - prevFutureEpoch)) / total;
                     } else {
@@ -152,7 +122,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
                 }
 
                 if (weekTime == block.timestamp) break;
-                prevWeekTime = weekTime;
+                prevTime = weekTime;
                 weekTime = Math.min(weekTime + interval, block.timestamp);
 
                 unchecked {
@@ -177,16 +147,21 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         (int128 _period, uint256 _integrateInvSupply) = _checkpoint();
 
         // Update user-specific integrals
-        int128 userPeriod = periodOf[tokenId][user];
-        uint256 oldIntegrateInvSupply = integrateInvSupply[userPeriod];
+        int128 checkpoint = periodOf[tokenId][user];
+        uint256 oldIntegrateInvSupply = integrateInvSupply[checkpoint];
         uint256 dIntegrate = _integrateInvSupply - oldIntegrateInvSupply;
         if (dIntegrate > 0) {
-            uint256 nonce = _nonces[tokenId];
-            uint256 sum = _lastValue(_pointsSum[tokenId][nonce]);
-            uint256 pt = _lastValue(_points[tokenId][nonce][user]);
-            integrateFraction[tokenId][user] += (pt * dIntegrate * 2) / 3 / 1e18; // 67% goes to voters
-            if (ownerOf(tokenId) == user) {
-                integrateFraction[tokenId][user] += (sum * dIntegrate) / 3 / 1e18; // 33% goes to the owner
+            VotedSlope memory slope = voteUserSlopes[tokenId][user];
+            uint256 ts = periodTimestamp[checkpoint];
+            if (ts >= slope.end) {
+                uint256 bias;
+                if (block.timestamp < slope.end) {
+                    bias = (slope.slope * (block.timestamp - ts)) / 2; // average value from ts to now
+                } else {
+                    bias = (slope.slope * (slope.end - ts)) / 2; // average value from ts to lockEnd
+                }
+                integrateFraction[tokenId][user] += (bias * dIntegrate * 2) / 3 / 1e18; // 67% goes to voters
+                integrateFraction[tokenId][ownerOf(tokenId)] += (bias * dIntegrate) / 3 / 1e18; // 33% goes to the owner
             }
         }
         periodOf[tokenId][user] = _period;
@@ -197,13 +172,13 @@ contract NFTGauge is WrappedERC721, INFTGauge {
      * @param tokenId Token Id to deposit
      * @param dividendRatio Dividend ratio for the voters in bps (units of 0.01%)
      * @param to The owner of the newly minted wrapped NFT
-     * @param _userWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
+     * @param userWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
      */
     function wrap(
         uint256 tokenId,
         uint256 dividendRatio,
         address to,
-        uint256 _userWeight
+        uint256 userWeight
     ) public override {
         require(dividendRatio <= 10000, "NFTG: INVALID_RATIO");
 
@@ -211,7 +186,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         _mint(to, tokenId);
 
-        vote(tokenId, _userWeight);
+        vote(tokenId, userWeight);
 
         emit Wrap(tokenId, to);
 
@@ -225,52 +200,49 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         _burn(tokenId);
 
-        uint256 nonce = _nonces[tokenId];
-        _updateValueAtNow(_pointsTotal, _lastValue(_pointsTotal) - _lastValue(_pointsSum[tokenId][nonce]));
-        _nonces[tokenId] = nonce + 1;
+        revoke(tokenId);
 
         emit Unwrap(tokenId, to);
 
         NFTs.safeTransferFrom(nftContract, address(this), to, tokenId);
     }
 
-    function vote(uint256 tokenId, uint256 _userWeight) public override {
+    function vote(uint256 tokenId, uint256 userWeight) public override {
         require(_exists(tokenId), "NFTG: NON_EXISTENT");
 
         userCheckpoint(tokenId, msg.sender);
 
-        uint256 balance = IVotingEscrow(votingEscrow).balanceOf(msg.sender);
-        uint256 pointNew = (balance * _userWeight) / 10000;
-        uint256 pointOld = points(tokenId, msg.sender);
+        address escrow = votingEscrow;
+        uint256 slope = uint256(uint128(IVotingEscrow(escrow).getLastUserSlope(msg.sender)));
+        uint256 lockEnd = IVotingEscrow(escrow).unlockTime(msg.sender);
 
-        uint256 nonce = _nonces[tokenId];
-        _updateValueAtNow(_points[tokenId][nonce][msg.sender], pointNew);
-        _updateValueAtNow(_pointsSum[tokenId][nonce], _lastValue(_pointsSum[tokenId][nonce]) + pointNew - pointOld);
-        _updateValueAtNow(_pointsTotal, _lastValue(_pointsTotal) + pointNew - pointOld);
+        uint256 powerUsed = _updateSlopes(tokenId, msg.sender, slope, lockEnd, userWeight);
+        IGaugeController(controller).voteForGaugeWeights(msg.sender, powerUsed);
 
-        uint256 userWeightOld = userWeight[msg.sender][tokenId];
-        uint256 _userWeightSum = userWeightSum[msg.sender] + _userWeight - userWeightOld;
-        userWeight[msg.sender][tokenId] = _userWeight;
-        userWeightSum[msg.sender] = _userWeightSum;
+        emit Vote(tokenId, msg.sender, userWeight);
+    }
 
-        IGaugeController(controller).voteForGaugeWeights(msg.sender, _userWeightSum);
+    function revoke(uint256 tokenId) public override {
+        require(!_exists(tokenId), "NFTG: EXISTENT");
 
-        emit Vote(tokenId, msg.sender, _userWeight);
+        userCheckpoint(tokenId, msg.sender);
+
+        uint256 powerUsed = _updateSlopes(tokenId, msg.sender, 0, 0, 0);
+        IGaugeController(controller).voteForGaugeWeights(msg.sender, powerUsed);
+
+        emit Vote(tokenId, msg.sender, 0);
     }
 
     function claimDividends(address token, uint256 tokenId) external override {
         uint256 amount;
-        uint256 _last = lastDividendClaimed[token][tokenId][msg.sender];
+        uint256 last = lastDividendClaimed[token][tokenId][msg.sender];
         uint256 i;
-        while (i < 250) {
-            uint256 id = _last + i;
+        while (i < 500) {
+            uint256 id = last + i;
             if (id >= dividends[token][tokenId].length) break;
 
-            Snapshot memory dividend = dividends[token][tokenId][id];
-            uint256 pt = _getValueAt(_points[tokenId][_nonces[tokenId]][msg.sender], dividend.timestamp);
-            if (pt > 0) {
-                amount += (pt * uint256(dividend.value)) / 1e18;
-            }
+            Dividend memory dividend = dividends[token][tokenId][id];
+            // TODO: sum up amount
 
             unchecked {
                 ++i;
@@ -278,59 +250,30 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         }
 
         require(i > 0, "NFTG: NO_AMOUNT_TO_CLAIM");
-        lastDividendClaimed[token][tokenId][msg.sender] = _last + i;
+        lastDividendClaimed[token][tokenId][msg.sender] = last + i;
 
         emit ClaimDividends(token, tokenId, amount, msg.sender);
         Tokens.transfer(token, msg.sender, amount);
     }
 
-    /**
-     * @dev `_getValueAt` retrieves the number of tokens at a given time
-     * @param snapshots The history of values being queried
-     * @param timestamp The block timestamp to retrieve the value at
-     * @return The weight at `timestamp`
-     */
-    function _getValueAt(Snapshot[] storage snapshots, uint256 timestamp) internal view returns (uint256) {
-        if (snapshots.length == 0) return 0;
+    function _updateSlopes(
+        uint256 tokenId,
+        address user,
+        uint256 slope,
+        uint256 lockEnd,
+        uint256 userWeight
+    ) internal returns (uint256 powerUsed) {
+        uint256 interval = _interval;
+        uint256 nextTime = ((block.timestamp + interval) / interval) * interval;
 
-        // Shortcut for the actual value
-        Snapshot storage last = snapshots[snapshots.length - 1];
-        if (timestamp >= last.timestamp) return last.value;
-        if (timestamp < snapshots[0].timestamp) return 0;
+        // Prepare slopes and biases in memory
+        VotedSlope memory oldSlope = voteUserSlopes[tokenId][user];
+        VotedSlope memory newSlope = VotedSlope({slope: (slope * userWeight) / 10000, end: lockEnd, power: userWeight});
 
-        // Binary search of the value in the array
-        uint256 min = 0;
-        uint256 max = snapshots.length - 1;
-        while (max > min) {
-            uint256 mid = (max + min + 1) / 2;
-            if (snapshots[mid].timestamp <= timestamp) {
-                min = mid;
-            } else {
-                max = mid - 1;
-            }
-        }
-        return snapshots[min].value;
-    }
-
-    function _lastValue(Snapshot[] storage snapshots) internal view returns (uint256) {
-        uint256 length = snapshots.length;
-        return length > 0 ? uint256(snapshots[length - 1].value) : 0;
-    }
-
-    /**
-     * @dev `_updateValueAtNow` is used to update snapshots
-     * @param snapshots The history of data being updated
-     * @param _value The new number of weight
-     */
-    function _updateValueAtNow(Snapshot[] storage snapshots, uint256 _value) internal {
-        if ((snapshots.length == 0) || (snapshots[snapshots.length - 1].timestamp < block.timestamp)) {
-            Snapshot storage newCheckPoint = snapshots.push();
-            newCheckPoint.timestamp = uint64(block.timestamp);
-            newCheckPoint.value = uint192(_value);
-        } else {
-            Snapshot storage oldCheckPoint = snapshots[snapshots.length - 1];
-            oldCheckPoint.value = uint192(_value);
-        }
+        // Check and update powers (weights) used
+        powerUsed = voteUserPower[user] + newSlope.power - oldSlope.power;
+        voteUserPower[user] = powerUsed;
+        voteUserSlopes[tokenId][user] = newSlope;
     }
 
     function _settle(
@@ -354,10 +297,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         }
 
         uint256 dividend;
-        uint256 sum = _lastValue(_pointsSum[tokenId][_nonces[tokenId]]);
+        uint256 sum; // TODO: get the sum of shares
         if (sum > 0) {
             dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
-            dividends[currency][tokenId].push(Snapshot(uint64(block.timestamp), uint192((dividend * 1e18) / sum)));
+            // TODO: add a dividend
             emit DistributeDividend(currency, tokenId, dividend);
         }
         Tokens.transfer(currency, to, amount - fee - dividend);
