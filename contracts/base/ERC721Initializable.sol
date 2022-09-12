@@ -25,9 +25,6 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
     // Token symbol
     string private _symbol;
 
-    // Upper bound of tokenId parked
-    uint256 private _toTokenIdParked;
-
     // Mapping from token ID to owner address
     mapping(uint256 => address) private _owners;
 
@@ -244,18 +241,6 @@ abstract contract ERC721Initializable is Initializable, ERC165, IERC721, IERC721
 
         _operatorApprovals[owner][operator] = approved;
         emit ApprovalForAll(owner, operator, approved);
-    }
-
-    function _parked(uint256 tokenId) internal view virtual returns (bool) {
-        address owner = ERC721Initializable.ownerOf(tokenId);
-        return owner == address(0) && tokenId < _toTokenIdParked;
-    }
-
-    function _parkTokenIds(uint256 toTokenId) internal virtual {
-        uint256 fromTokenId = _toTokenIdParked;
-        require(toTokenId > fromTokenId, "ERC721: INVALID_TO_TOKEN_ID");
-
-        _toTokenIdParked = toTokenId;
     }
 
     /**
