@@ -51,13 +51,18 @@ interface INFTGauge is IWrappedERC721, IGauge {
 
     function timeSum(uint256 tokenId) external view returns (uint256 lastScheduledTime);
 
-    function voteUserSlopes(uint256 tokenId, address user)
+    function voteUserSlopes(
+        uint256 tokenId,
+        address user,
+        uint256 index
+    )
         external
         view
         returns (
             uint256 slope,
             uint256 power,
-            uint256 end
+            uint64 end,
+            uint64 timestamp
         );
 
     function voteUserPower(address user) external view returns (uint256);
@@ -67,6 +72,8 @@ interface INFTGauge is IWrappedERC721, IGauge {
     function isKilled() external view returns (bool);
 
     function dividendsLength(address token, uint256 tokenId) external view returns (uint256);
+
+    function voteUserSlopesLength(uint256 tokenId, address user) external view returns (uint256);
 
     function userCheckpoint(uint256 tokenId, address user) external;
 
