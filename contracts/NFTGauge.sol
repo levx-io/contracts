@@ -215,6 +215,11 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         revoke(tokenId);
 
+        uint256 interval = _interval;
+        uint256 nextTime = ((block.timestamp + interval) / interval) * interval;
+        pointsSum[tokenId][nextTime].bias = 0;
+        pointsSum[tokenId][nextTime].slope = 0;
+
         emit Unwrap(tokenId, to);
 
         NFTs.safeTransferFrom(nftContract, address(this), to, tokenId);
