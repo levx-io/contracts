@@ -116,9 +116,9 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     function _distributeFees(address token, uint256 amount) internal {
         require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
 
-        fees[token].push(
-            Fee(uint64(block.timestamp), uint192((amount * 1e18) / IVotingEscrow(votingEscrow).totalSupply()))
-        );
+        address escrow = votingEscrow;
+        IVotingEscrow(escrow).checkpoint();
+        fees[token].push(Fee(uint64(block.timestamp), uint192((amount * 1e18) / IVotingEscrow(escrow).totalSupply())));
 
         emit DistributeFees(token, fees[token].length - 1, amount);
     }
