@@ -47,6 +47,10 @@ interface INFTGauge is IWrappedERC721, IGauge {
 
     function integrateFraction(uint256 tokenId, address user) external view returns (uint256);
 
+    function pointsSum(uint256 tokenId, uint256 time) external view returns (uint256 bias, uint256 slope);
+
+    function timeSum(uint256 tokenId) external view returns (uint256 lastScheduledTime);
+
     function voteUserSlopes(uint256 tokenId, address user)
         external
         view

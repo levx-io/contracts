@@ -14,7 +14,12 @@ import "./libraries/NFTs.sol";
 contract NFTGauge is WrappedERC721, INFTGauge {
     struct Dividend {
         uint64 timestamp;
-        uint192 value;
+        uint192 amountPerShare;
+    }
+
+    struct Point {
+        uint256 bias;
+        uint256 slope;
     }
 
     struct VotedSlope {
@@ -29,7 +34,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     uint256 public override futureEpochTime;
 
     mapping(uint256 => uint256) public override dividendRatios;
-    mapping(address => mapping(uint256 => Dividend[])) public override dividends; // currency -> tokenId -> Snapshot
+    mapping(address => mapping(uint256 => Dividend[])) public override dividends; // currency -> tokenId -> Dividend
     mapping(address => mapping(uint256 => mapping(address => uint256))) public override lastDividendClaimed; // currency -> tokenId -> user -> index
 
     int128 public override period;
@@ -38,6 +43,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     mapping(uint256 => mapping(address => int128)) public override periodOf; // tokenId -> user -> period
     mapping(uint256 => mapping(address => uint256)) public override integrateFraction; // tokenId -> user -> fraction
+
+    mapping(uint256 => mapping(uint256 => Point)) public override pointsSum; // tokenId -> time -> Point
+    mapping(uint256 => mapping(uint256 => uint256)) internal _changesSum; // tokenId -> time -> slope
+    mapping(uint256 => uint256) public override timeSum; // tokenId -> last scheduled time (next week)
 
     mapping(uint256 => mapping(address => VotedSlope)) public override voteUserSlopes; // user -> tokenId -> VotedSlope
     mapping(address => uint256) public override voteUserPower; // Total vote power used by user
@@ -186,6 +195,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         _mint(to, tokenId);
 
+        if (timeSum[tokenId] == 0) {
+            uint256 interval = _interval;
+            timeSum[tokenId] = ((block.timestamp + interval) / interval) * interval;
+        }
         vote(tokenId, userWeight);
 
         emit Wrap(tokenId, to);
@@ -256,6 +269,34 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         Tokens.transfer(token, msg.sender, amount);
     }
 
+    function _getSum(uint256 tokenId) internal returns (uint256) {
+        uint256 t = timeSum[tokenId];
+        if (t > 0) {
+            Point memory pt = pointsSum[tokenId][t];
+            uint256 interval = _interval;
+            for (uint256 i; i < 500; ) {
+                if (t > block.timestamp) break;
+                t += interval;
+                uint256 dBias = pt.slope * interval;
+                if (pt.bias > dBias) {
+                    pt.bias -= dBias;
+                    uint256 dSlope = _changesSum[tokenId][t];
+                    pt.slope -= dSlope;
+                } else {
+                    pt.bias = 0;
+                    pt.slope = 0;
+                }
+                pointsSum[tokenId][t] = pt;
+                if (t > block.timestamp) timeSum[tokenId] = t;
+
+                unchecked {
+                    ++i;
+                }
+            }
+            return pt.bias;
+        } else return 0;
+    }
+
     function _updateSlopes(
         uint256 tokenId,
         address user,
@@ -268,12 +309,32 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         // Prepare slopes and biases in memory
         VotedSlope memory oldSlope = voteUserSlopes[tokenId][user];
+        uint256 oldDt;
+        if (oldSlope.end > nextTime) oldDt = oldSlope.end - nextTime;
         VotedSlope memory newSlope = VotedSlope({slope: (slope * userWeight) / 10000, end: lockEnd, power: userWeight});
 
         // Check and update powers (weights) used
         powerUsed = voteUserPower[user] + newSlope.power - oldSlope.power;
         voteUserPower[user] = powerUsed;
         voteUserSlopes[tokenId][user] = newSlope;
+
+        /// Remove old and schedule new slope changes
+        uint256 oldBias = oldSlope.slope * oldDt;
+        uint256 newBias = newSlope.slope * (lockEnd - nextTime);
+        pointsSum[tokenId][nextTime].bias = Math.max(_getSum(tokenId) + newBias, oldBias) - oldBias;
+        if (oldSlope.end > nextTime) {
+            pointsSum[tokenId][nextTime].slope =
+                Math.max(pointsSum[tokenId][nextTime].slope + newSlope.slope, oldSlope.slope) -
+                oldSlope.slope;
+        } else {
+            pointsSum[tokenId][nextTime].slope += newSlope.slope;
+        }
+        if (oldSlope.end > block.timestamp) {
+            // Cancel old slope changes if they still didn't happen
+            _changesSum[tokenId][oldSlope.end] -= oldSlope.slope;
+        }
+        // Add slope changes for new slopes
+        _changesSum[tokenId][newSlope.end] += newSlope.slope;
     }
 
     function _settle(
@@ -297,10 +358,13 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         }
 
         uint256 dividend;
-        uint256 sum; // TODO: get the sum of shares
+        uint256 sum = _getSum(tokenId);
         if (sum > 0) {
+            uint256 interval = _interval;
             dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
-            // TODO: add a dividend
+            dividends[currency][tokenId].push(
+                Dividend(uint64((block.timestamp / interval) * interval), uint192((dividend * 1e18) / sum))
+            );
             emit DistributeDividend(currency, tokenId, dividend);
         }
         Tokens.transfer(currency, to, amount - fee - dividend);
