@@ -10,6 +10,7 @@ import "../interfaces/INFTGaugeFactory.sol";
 import "../libraries/Signature.sol";
 import "../libraries/Tokens.sol";
 import "../libraries/Math.sol";
+import "../libraries/Errors.sol";
 
 abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappedERC721 {
     using Strings for uint256;
@@ -59,7 +60,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         override(ERC721Initializable, IERC721Metadata)
         returns (string memory output)
     {
-        require(_exists(tokenId), "WERC721: TOKEN_NON_EXISTENT");
+        revertIfNonExistent(_exists(tokenId));
 
         return IERC721Metadata(nftContract).tokenURI(tokenId);
     }
@@ -71,9 +72,9 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         uint64 deadline,
         bool auction
     ) external override {
-        require(block.timestamp < deadline, "WERC721: INVALID_DEADLINE");
-        require(ownerOf(tokenId) == msg.sender, "WERC721: FORBIDDEN");
-        require(currency == address(0), "WERC721: INVALID_CURRENCY");
+        revertIfForbidden(ownerOf(tokenId) == msg.sender);
+        revertIfInvalidDeadline(block.timestamp < deadline);
+        revertIfInvalidCurrency(currency == address(0));
 
         sales[tokenId][msg.sender] = Order(price, currency, deadline, auction);
 
@@ -81,7 +82,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     }
 
     function cancelListing(uint256 tokenId) external override {
-        require(ownerOf(tokenId) == msg.sender, "WERC721: FORBIDDEN");
+        revertIfForbidden(ownerOf(tokenId) == msg.sender);
 
         delete sales[tokenId][msg.sender];
         delete currentBids[tokenId][msg.sender];
@@ -91,7 +92,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
     function buyETH(uint256 tokenId, address owner) external payable override {
         address currency = _buy(tokenId, owner, msg.value);
-        require(currency == address(0), "WERC721: ETH_UNACCEPTABLE");
+        revertIfInvalidCurrency(currency == address(0));
 
         _settle(tokenId, address(0), owner, msg.value);
     }
@@ -102,7 +103,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         uint256 price
     ) external override nonReentrant {
         address currency = _buy(tokenId, owner, price);
-        require(currency != address(0), "WERC721: ONLY_ETH_ACCEPTABLE");
+        revertIfInvalidCurrency(currency != address(0));
 
         INFTGaugeFactory(factory).executePayment(currency, msg.sender, price);
 
@@ -115,10 +116,10 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         uint256 price
     ) internal returns (address currency) {
         Order memory sale = sales[tokenId][owner];
-        require(sale.deadline > 0, "WERC721: NOT_LISTED_FOR_SALE");
-        require(block.timestamp <= sale.deadline, "WERC721: EXPIRED");
-        require(sale.price == price, "WERC721: INVALID_PRICE");
-        require(!sale.auction, "WERC721: BID_REQUIRED");
+        revertIfNotListed(sale.deadline > 0);
+        revertIfExpired(block.timestamp <= sale.deadline);
+        revertIfInvalidPrice(sale.price == price);
+        revertIfAuction(!sale.auction);
 
         _safeTransfer(owner, msg.sender, tokenId, "0x");
 
@@ -128,7 +129,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
     function bidETH(uint256 tokenId, address owner) external payable override {
         address currency = _bid(tokenId, owner, msg.value);
-        require(currency == address(0), "WERC721: ETH_UNACCEPTABLE");
+        revertIfInvalidCurrency(currency == address(0));
     }
 
     function bid(
@@ -137,7 +138,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         uint256 price
     ) external override nonReentrant {
         address currency = _bid(tokenId, owner, price);
-        require(currency != address(0), "WERC721: ONLY_ETH_ACCEPTABLE");
+        revertIfInvalidCurrency(currency != address(0));
 
         INFTGaugeFactory(factory).executePayment(currency, msg.sender, price);
     }
@@ -149,17 +150,17 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     ) internal returns (address currency) {
         Order memory sale = sales[tokenId][owner];
         uint256 deadline = sale.deadline;
-        require(deadline > 0, "WERC721: NOT_LISTED_FOR_SALE");
-        require(sale.auction, "WERC721: NOT_BIDDABLE");
+        revertIfNotListed(deadline > 0);
+        revertIfNotAuction(sale.auction);
 
         currency = sale.currency;
         Bid_ memory prevBid = currentBids[tokenId][owner];
         if (prevBid.price == 0) {
-            require(price >= sale.price, "WERC721: PRICE_TOO_LOW");
-            require(block.timestamp <= deadline, "WERC721: EXPIRED");
+            revertIfPriceTooLow(price >= sale.price);
+            revertIfExpired(block.timestamp <= deadline);
         } else {
-            require(price >= (prevBid.price * 110) / 100, "WERC721: PRICE_TOO_LOW");
-            require(block.timestamp <= Math.max(deadline, prevBid.timestamp + 10 minutes), "WERC721: EXPIRED");
+            revertIfPriceTooLow(price >= (prevBid.price * 110) / 100);
+            revertIfExpired(block.timestamp <= Math.max(deadline, prevBid.timestamp + 10 minutes));
 
             Tokens.transfer(currency, prevBid.bidder, prevBid.price);
         }
@@ -170,12 +171,12 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
     function claim(uint256 tokenId, address owner) external override nonReentrant {
         Order memory sale = sales[tokenId][owner];
-        require(sale.deadline > 0, "WERC721: NOT_LISTED_FOR_SALE");
-        require(sale.auction, "WERC721: NOT_CLAIMABLE");
+        revertIfNotListed(sale.deadline > 0);
+        revertIfNotAuction(sale.auction);
 
         Bid_ memory currentBid = currentBids[tokenId][owner];
-        require(currentBid.bidder == msg.sender, "WERC721: FORBIDDEN");
-        require(currentBid.timestamp + 10 minutes < block.timestamp, "WERC721: BID_NOT_FINISHED");
+        revertIfForbidden(currentBid.bidder == msg.sender);
+        revertIfBidInProgress(currentBid.timestamp + 10 minutes < block.timestamp);
 
         Tokens.transfer(owner, msg.sender, tokenId);
 
@@ -205,9 +206,9 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         address currency,
         uint64 deadline
     ) internal {
-        require(_exists(tokenId), "WERC721: INVALID_TOKEN_ID");
-        require(price > 0, "WERC721: INVALID_PRICE");
-        require(block.timestamp < uint256(deadline), "WERC721: INVALID_DEADLINE");
+        revertIfNonExistent(_exists(tokenId));
+        revertIfInvalidPrice(price > 0);
+        revertIfInvalidDeadline(block.timestamp < uint256(deadline));
 
         Order memory offer = offers[tokenId][msg.sender];
         if (offer.deadline > 0) {
@@ -223,7 +224,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
     function withdrawOffer(uint256 tokenId) external override {
         Order memory offer = offers[tokenId][msg.sender];
-        require(offer.deadline > 0, "WERC721: INVALID_OFFER");
+        revertIfInvalidOffer(offer.deadline > 0);
 
         delete offers[tokenId][msg.sender];
 
@@ -233,11 +234,11 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     }
 
     function acceptOffer(uint256 tokenId, address maker) external override nonReentrant {
-        require(ownerOf(tokenId) == msg.sender, "WERC721: FORBIDDEN");
+        revertIfForbidden(ownerOf(tokenId) == msg.sender);
 
         Order memory offer = offers[tokenId][maker];
-        require(offer.deadline > 0, "WERC721: INVALID_OFFER");
-        require(block.timestamp <= offer.deadline, "WERC721: EXPIRED");
+        revertIfInvalidOffer(offer.deadline > 0);
+        revertIfExpired(block.timestamp <= offer.deadline);
 
         delete offers[tokenId][maker];
         _safeTransfer(msg.sender, maker, tokenId, "0x");

@@ -19,29 +19,6 @@ interface INFTGauge is IWrappedERC721, IGauge {
 
     function votingEscrow() external view returns (address);
 
-    function futureEpochTime() external view returns (uint256);
-
-    function wraps(uint256 tokenId, uint256 index)
-        external
-        view
-        returns (
-            uint128 dividendRatio,
-            uint64 start,
-            uint64 end
-        );
-
-    function dividends(
-        address token,
-        uint256 tokenId,
-        uint256 id
-    ) external view returns (uint64 blockNumber, uint192 amountPerShare);
-
-    function lastDividendClaimed(
-        address token,
-        uint256 tokenId,
-        address user
-    ) external view returns (uint256);
-
     function integrateCheckpoint() external view returns (uint256);
 
     function period() external view returns (int128);
@@ -76,13 +53,7 @@ interface INFTGauge is IWrappedERC721, IGauge {
 
     function lastUserVote(uint256 tokenId, address user) external view returns (uint256 time);
 
-    function inflationRate() external view returns (uint256);
-
     function isKilled() external view returns (bool);
-
-    function wrapsLength(uint256 tokenId) external view returns (uint256);
-
-    function dividendsLength(address token, uint256 tokenId) external view returns (uint256);
 
     function voteUserSlopesLength(uint256 tokenId, address user) external view returns (uint256);
 
