@@ -30,12 +30,18 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint64 timestamp;
     }
 
+    struct Wrap_ {
+        uint128 dividendRatio;
+        uint64 start;
+        uint64 end;
+    }
+
     address public override minter;
     address public override controller;
     address public override votingEscrow;
     uint256 public override futureEpochTime;
 
-    mapping(uint256 => uint256) public override dividendRatios;
+    mapping(uint256 => Wrap_[]) public override wraps;
     mapping(address => mapping(uint256 => Dividend[])) public override dividends; // currency -> tokenId -> Dividend
     mapping(address => mapping(uint256 => mapping(address => uint256))) public override lastDividendClaimed; // currency -> tokenId -> user -> index
 
@@ -74,6 +80,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     function integrateCheckpoint() external view override returns (uint256) {
         return periodTimestamp[period];
+    }
+
+    function wrapsLength(uint256 tokenId) external view override returns (uint256) {
+        return wraps[tokenId].length;
     }
 
     function dividendsLength(address token, uint256 tokenId) external view override returns (uint256) {
@@ -168,15 +178,33 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         if (dIntegrate > 0) {
             VotedSlope memory slope = _lastValue(voteUserSlopes[tokenId][user]);
             uint256 ts = periodTimestamp[checkpoint];
-            if (ts >= slope.end) {
+            if (ts <= slope.end) {
                 uint256 bias;
                 if (block.timestamp < slope.end) {
-                    bias = (slope.slope * (block.timestamp - ts)) / 2; // average value from ts to now
+                    bias = (slope.slope * (2 * slope.end - ts - block.timestamp)) / 2; // average value from ts to now
                 } else {
                     bias = (slope.slope * (slope.end - ts)) / 2; // average value from ts to lockEnd
                 }
-                integrateFraction[tokenId][user] += (bias * dIntegrate * 2) / 3 / 1e18; // 67% goes to voters
-                integrateFraction[tokenId][ownerOf(tokenId)] += (bias * dIntegrate) / 3 / 1e18; // 33% goes to the owner
+
+                uint256 time = block.timestamp - ts;
+                uint256 wrapped;
+                uint256 length = wraps[tokenId].length;
+                for (uint256 i; i < 500 && i < length; ) {
+                    Wrap_ memory _wrap = wraps[tokenId][length - i - 1];
+                    (uint256 start, uint256 end) = (_wrap.start, _wrap.end);
+                    if (end == 0) end = block.timestamp;
+                    if (start < ts) {
+                        wrapped += (end - ts);
+                        break;
+                    } else wrapped += (end - start);
+
+                    unchecked {
+                        ++i;
+                    }
+                }
+
+                integrateFraction[tokenId][user] += (bias * dIntegrate * wrapped * 2) / time / 3 / 1e18; // 67% goes to voters
+                integrateFraction[tokenId][ownerOf(tokenId)] += (bias * dIntegrate * wrapped) / time / 3 / 1e18; // 33% goes to the owner
             }
         }
         periodOf[tokenId][user] = _period;
@@ -197,7 +225,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     ) public override {
         require(dividendRatio <= 10000, "NFTG: INVALID_RATIO");
 
-        dividendRatios[tokenId] = dividendRatio;
+        wraps[tokenId].push(Wrap_(uint128(dividendRatio), uint64(block.timestamp), 0));
 
         _mint(to, tokenId);
 
@@ -215,17 +243,11 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     function unwrap(uint256 tokenId, address to) public override {
         require(ownerOf(tokenId) == msg.sender, "NFTG: FORBIDDEN");
 
-        dividendRatios[tokenId] = 0;
+        wraps[tokenId][wraps[tokenId].length - 1].end = uint64(block.timestamp);
 
         _burn(tokenId);
 
         revoke(tokenId);
-
-        uint256 interval = _interval;
-        uint256 nextTime = ((block.timestamp + interval) / interval) * interval;
-        pointsSum[tokenId][nextTime].bias = 0;
-        pointsSum[tokenId][nextTime].slope = 0;
-        timeSum[tokenId] = nextTime;
 
         emit Unwrap(tokenId, to);
 
@@ -432,7 +454,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 sum = _getSum(tokenId);
         if (sum > 0) {
             uint256 interval = _interval;
-            dividend = ((amount - fee) * dividendRatios[tokenId]) / 10000;
+            dividend = ((amount - fee) * wraps[tokenId][wraps[tokenId].length - 1].dividendRatio) / 10000;
             dividends[currency][tokenId].push(
                 Dividend(uint64((block.timestamp / interval) * interval), uint192((dividend * 1e18) / sum))
             );
