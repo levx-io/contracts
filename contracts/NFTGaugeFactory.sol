@@ -7,6 +7,7 @@ import "./base/CloneFactory.sol";
 import "./interfaces/INFTGaugeFactory.sol";
 import "./libraries/Integers.sol";
 import "./libraries/Tokens.sol";
+import "./libraries/VotingEscrowHelper.sol";
 import "./NFTGauge.sol";
 
 contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
@@ -130,20 +131,16 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     function claimFees(address token, uint256 to) external override {
         uint256 from = lastFeeClaimed[token][msg.sender];
 
-        (int128 value, , uint256 start, ) = IVotingEscrow(votingEscrow).locked(msg.sender);
+        address escrow = votingEscrow;
+        (int128 value, , uint256 start, ) = IVotingEscrow(escrow).locked(msg.sender);
         require(value > 0, "NFTGF: LOCK_NOT_FOUND");
-
-        uint256 epoch = IVotingEscrow(votingEscrow).userPointEpoch(msg.sender);
-        (int128 bias, int128 slope, uint256 ts, ) = IVotingEscrow(votingEscrow).userPointHistory(msg.sender, epoch);
 
         uint256 amount;
         for (uint256 i = from; i < to; ) {
             Fee memory fee = fees[token][i];
-            if (start < fee.timestamp) {
-                int128 balance = bias - slope * (uint256(fee.timestamp) - ts).toInt128();
-                if (balance > 0) {
-                    amount += (balance.toUint256() * uint256(fee.amountPerShare)) / 1e18;
-                }
+            if (start <= fee.timestamp) {
+                uint256 balance = VotingEscrowHelper.balanceOf(escrow, msg.sender, fee.timestamp);
+                if (balance > 0) amount += (balance * fee.amountPerShare) / 1e18;
             }
             unchecked {
                 ++i;
