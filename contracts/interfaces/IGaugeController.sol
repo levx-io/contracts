@@ -33,8 +33,6 @@ interface IGaugeController {
 
     function voteUserPower(address user) external view returns (uint256 totalVotePower);
 
-    function lastUserVote(address user, address addr) external view returns (uint256 time);
-
     function pointsWeight(address addr, uint256 time) external view returns (uint256 bias, uint256 slope);
 
     function timeWeight(address addr) external view returns (uint256 lastScheduledTime);

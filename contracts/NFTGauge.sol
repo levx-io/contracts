@@ -58,12 +58,14 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     mapping(uint256 => mapping(address => VotedSlope[])) public override voteUserSlopes; // tokenId -> user -> VotedSlopes
     mapping(address => uint256) public override voteUserPower; // Total vote power used by user
+    mapping(uint256 => mapping(address => uint256)) public override lastUserVote; // Last user vote's timestamp
 
     uint256 public override inflationRate;
 
     bool public override isKilled;
 
     uint256 internal _interval;
+    uint256 internal _weightVoteDelay;
 
     function initialize(address _nftContract, address _minter) external override initializer {
         __WrappedERC721_init(_nftContract);
@@ -76,6 +78,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         inflationRate = IMinter(_minter).rate();
         futureEpochTime = IMinter(_minter).futureEpochTimeWrite();
         _interval = IGaugeController(_controller).interval();
+        _weightVoteDelay = IGaugeController(_controller).weightVoteDelay();
     }
 
     function integrateCheckpoint() external view override returns (uint256) {
@@ -256,6 +259,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     function vote(uint256 tokenId, uint256 userWeight) public override {
         require(_exists(tokenId), "NFTG: NON_EXISTENT");
+        require(block.timestamp >= lastUserVote[tokenId][msg.sender] + _weightVoteDelay, "NFTG: VOTED_TOO_EARLY");
 
         userCheckpoint(tokenId, msg.sender);
 
@@ -266,16 +270,23 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 powerUsed = _updateSlopes(tokenId, msg.sender, slope, lockEnd, userWeight);
         IGaugeController(controller).voteForGaugeWeights(msg.sender, powerUsed);
 
+        // Record last action time
+        lastUserVote[tokenId][msg.sender] = block.timestamp;
+
         emit Vote(tokenId, msg.sender, userWeight);
     }
 
     function revoke(uint256 tokenId) public override {
         require(!_exists(tokenId), "NFTG: EXISTENT");
+        require(block.timestamp >= lastUserVote[tokenId][msg.sender] + _weightVoteDelay, "NFTG: VOTED_TOO_EARLY");
 
         userCheckpoint(tokenId, msg.sender);
 
         uint256 powerUsed = _updateSlopes(tokenId, msg.sender, 0, 0, 0);
         IGaugeController(controller).voteForGaugeWeights(msg.sender, powerUsed);
+
+        // Record last action time
+        lastUserVote[tokenId][msg.sender] = block.timestamp;
 
         emit Vote(tokenId, msg.sender, 0);
     }

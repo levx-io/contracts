@@ -74,6 +74,8 @@ interface INFTGauge is IWrappedERC721, IGauge {
 
     function voteUserPower(address user) external view returns (uint256);
 
+    function lastUserVote(uint256 tokenId, address user) external view returns (uint256 time);
+
     function inflationRate() external view returns (uint256);
 
     function isKilled() external view returns (bool);

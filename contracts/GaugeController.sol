@@ -27,9 +27,9 @@ contract GaugeController is Ownable, IGaugeController {
 
     uint256 internal constant MULTIPLIER = 1e18;
 
-    uint256 public override interval;
-    uint256 public override weightVoteDelay;
-    address public override votingEscrow;
+    uint256 public immutable override interval;
+    uint256 public immutable override weightVoteDelay;
+    address public immutable override votingEscrow;
 
     // Gauge parameters
     // All numbers are "fixed point" on the basis of 1e18
@@ -46,7 +46,6 @@ contract GaugeController is Ownable, IGaugeController {
 
     mapping(address => mapping(address => VotedSlope)) public override voteUserSlopes; // user -> addr -> VotedSlope
     mapping(address => uint256) public override voteUserPower; // Total vote power used by user
-    mapping(address => mapping(address => uint256)) public override lastUserVote; // Last user vote's timestamp for each gauge address
 
     // Past and scheduled points for gauge weight, sum of weights per type, total weight
     // Point is for bias+slope
@@ -307,7 +306,6 @@ contract GaugeController is Ownable, IGaugeController {
         uint256 nextTime = ((block.timestamp + _interval) / _interval) * _interval;
         require(lockEnd > nextTime, "GC: LOCK_EXPIRES_TOO_EARLY");
         require((userWeight >= 0) && (userWeight <= 10000), "GC: VOTING_POWER_ALL_USED");
-        require(block.timestamp >= lastUserVote[user][msg.sender] + weightVoteDelay, "GC: VOTED_TOO_EARLY");
 
         // Avoid stack too deep error
         {
@@ -340,9 +338,6 @@ contract GaugeController is Ownable, IGaugeController {
                 newSlope
             );
         }
-
-        // Record last action time
-        lastUserVote[user][msg.sender] = block.timestamp;
 
         emit VoteForGauge(block.timestamp, user, msg.sender, userWeight);
     }
