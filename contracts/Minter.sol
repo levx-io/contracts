@@ -81,7 +81,8 @@ contract Minter is IMinter {
 
         require(end <= currentEpochTime + rateReductionTime, "MT: TOO_FAR_IN_FUTURE");
 
-        for (uint256 i; i < 1000; ) {
+        // Number of rate changes MUST be less than 10,000
+        for (uint256 i; i < 10000; ) {
             if (end >= currentEpochTime) {
                 uint256 currentEnd = end;
                 if (currentEnd > currentEpochTime + rateReductionTime)
