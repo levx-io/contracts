@@ -47,9 +47,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         address _controller = IMinter(_minter).controller();
         votingEscrow = IGaugeController(_controller).votingEscrow();
         discountToken = _discountToken;
-        feeRatio = _feeRatio;
-
-        emit UpdateFeeRatio(_feeRatio);
+        updateFeeRatio(_feeRatio);
 
         NFTGauge gauge = new NFTGauge();
         gauge.initialize(_controller, address(0));
@@ -75,7 +73,9 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         emit UpdateCurrencyConverter(token, converter);
     }
 
-    function updateFeeRatio(uint256 _feeRatio) external override onlyOwner {
+    function updateFeeRatio(uint256 _feeRatio) public override onlyOwner {
+        require(_feeRatio < 10000, "NFTGF: INVALID_FEE_RATIO");
+
         feeRatio = _feeRatio;
 
         emit UpdateFeeRatio(_feeRatio);
