@@ -129,6 +129,8 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
      * @param to the last index of the fee (exclusive)
      */
     function claimFees(address token, uint256 to) external override {
+        require(to < fees[token].length, "NFTGF: INDEX_OUT_OF_RANGE");
+
         uint256 from = lastFeeClaimed[token][msg.sender];
 
         address escrow = votingEscrow;
