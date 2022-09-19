@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
+error OutOfRange();
 error Forbidden();
 error InvalidDividendRatio();
 error InvalidDeadline();
@@ -17,6 +18,10 @@ error NotAuction();
 error PriceTooLow();
 error InvalidOffer();
 error BidInProgress();
+
+function revertIfOutOfRange(bool success) pure {
+    if (!success) revert OutOfRange();
+}
 
 function revertIfForbidden(bool success) pure {
     if (!success) revert Forbidden();
