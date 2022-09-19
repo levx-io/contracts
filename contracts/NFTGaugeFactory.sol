@@ -44,14 +44,15 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     ) {
         weth = _weth;
         minter = _minter;
-        votingEscrow = IGaugeController(IMinter(_minter).controller()).votingEscrow();
+        address _controller = IMinter(_minter).controller();
+        votingEscrow = IGaugeController(_controller).votingEscrow();
         discountToken = _discountToken;
         feeRatio = _feeRatio;
 
         emit UpdateFeeRatio(_feeRatio);
 
         NFTGauge gauge = new NFTGauge();
-        gauge.initialize(address(0), address(0));
+        gauge.initialize(_controller, address(0));
         target = address(gauge);
     }
 
