@@ -21,7 +21,7 @@ library NFTs {
         address to,
         uint256 tokenId
     ) internal {
-        if (token == CRYPTOPUNKS) {
+        if (token == CRYPTOPUNKS && from != address(this)) {
             // ICryptoPunksMarket.offerPunkForSaleToAddress() should have been called by the owner prior to this call
             ICryptoPunksMarket(token).buyPunk(tokenId);
             if (to != address(this)) {
