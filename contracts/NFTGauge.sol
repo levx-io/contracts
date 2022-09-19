@@ -306,7 +306,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         _lastDividendClaimed[token][tokenId][msg.sender] = last + i;
 
         emit ClaimDividends(token, tokenId, amount, msg.sender);
-        Tokens.transfer(token, msg.sender, amount);
+        Tokens.safeTransfer(token, msg.sender, amount, _weth);
     }
 
     /**
@@ -464,7 +464,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
             );
             emit DistributeDividend(currency, tokenId, dividend);
         }
-        Tokens.transfer(currency, to, amount - fee - dividend);
+        Tokens.safeTransfer(currency, to, amount - fee - dividend, _weth);
     }
 
     function _beforeTokenTransfer(

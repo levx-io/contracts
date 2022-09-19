@@ -34,10 +34,13 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     mapping(uint256 => mapping(address => Bid_)) public override currentBids;
     mapping(uint256 => mapping(address => Order)) public override offers;
 
+    address internal _weth;
+
     function __WrappedERC721_init(address _nftContract) internal initializer {
         nftContract = _nftContract;
         factory = msg.sender;
 
+        _weth = INFTGaugeFactory(msg.sender).weth();
         string memory name;
         string memory symbol;
         try IERC721Metadata(_nftContract).name() returns (string memory _name) {
@@ -119,7 +122,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         revertIfInvalidPrice(sale.price == price);
         revertIfAuction(!sale.auction);
 
-        _safeTransfer(owner, msg.sender, tokenId, "0x");
+        _transfer(owner, msg.sender, tokenId);
 
         currency = sale.currency;
         emit Buy(tokenId, owner, msg.sender, price, currency);
@@ -160,7 +163,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
             revertIfPriceTooLow(price >= (prevBid.price * 110) / 100);
             revertIfExpired(block.timestamp <= Math.max(deadline, prevBid.timestamp + 10 minutes));
 
-            Tokens.transfer(currency, prevBid.bidder, prevBid.price);
+            Tokens.safeTransfer(currency, prevBid.bidder, prevBid.price, _weth);
         }
         currentBids[tokenId][owner] = Bid_(price, msg.sender, uint64(block.timestamp));
 
@@ -176,11 +179,11 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         revertIfForbidden(currentBid.bidder == msg.sender);
         revertIfBidInProgress(currentBid.timestamp + 10 minutes < block.timestamp);
 
-        Tokens.transfer(owner, msg.sender, tokenId);
+        _transfer(owner, msg.sender, tokenId);
 
-        _settle(tokenId, sale.currency, owner, sale.price);
+        _settle(tokenId, sale.currency, owner, currentBid.price);
 
-        emit Claim(tokenId, owner, msg.sender, sale.price, sale.currency);
+        emit Claim(tokenId, owner, msg.sender, currentBid.price, sale.currency);
     }
 
     function makeOfferETH(uint256 tokenId, uint64 deadline) external payable override nonReentrant {
@@ -212,7 +215,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         if (offer.deadline > 0) {
             emit WithdrawOffer(tokenId, msg.sender);
 
-            Tokens.transfer(offer.currency, msg.sender, offer.price);
+            Tokens.safeTransfer(offer.currency, msg.sender, offer.price, _weth);
         }
 
         offers[tokenId][msg.sender] = Order(price, currency, deadline, false);
@@ -228,7 +231,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
 
         emit WithdrawOffer(tokenId, msg.sender);
 
-        Tokens.transfer(offer.currency, msg.sender, offer.price);
+        Tokens.safeTransfer(offer.currency, msg.sender, offer.price, _weth);
     }
 
     function acceptOffer(uint256 tokenId, address maker) external override nonReentrant {
