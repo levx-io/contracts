@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "../base/ERC721Initializable.sol";
 import "../interfaces/IWrappedERC721.sol";
 import "../interfaces/INFTGaugeFactory.sol";
-import "../libraries/Signature.sol";
 import "../libraries/Tokens.sol";
 import "../libraries/Math.sol";
 import "../libraries/Errors.sol";
