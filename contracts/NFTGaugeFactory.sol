@@ -138,7 +138,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         uint256 amount;
         for (uint256 i = from; i < to; ) {
             Fee memory fee = fees[token][i];
-            if (start <= fee.timestamp) {
+            if (start < fee.timestamp) {
                 uint256 balance = VotingEscrowHelper.balanceOf(escrow, msg.sender, fee.timestamp);
                 if (balance > 0) amount += (balance * fee.amountPerShare) / 1e18;
             }
