@@ -73,7 +73,6 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     ) external override {
         revertIfForbidden(ownerOf(tokenId) == msg.sender);
         revertIfInvalidDeadline(block.timestamp < deadline);
-        revertIfInvalidCurrency(currency == address(0));
 
         sales[tokenId][msg.sender] = Order(price, currency, deadline, auction);
 
