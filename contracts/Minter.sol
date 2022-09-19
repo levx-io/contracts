@@ -112,6 +112,7 @@ contract Minter is IMinter {
     function updateTreasury(address newTreasury) external override {
         require(msg.sender == treasury, "MT: FORBIDDEN");
         treasury = newTreasury;
+        emit UpdateTreasury(newTreasury);
     }
 
     /**

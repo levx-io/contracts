@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 interface IMinter {
     event UpdateMiningParameters(uint256 time, uint256 rate, uint256 supply);
+    event UpdateTreasury(address treasury);
     event Minted(address indexed recipient, address indexed gaugeAddr, uint256 indexed tokenId, uint256 minted);
     event MintedForTreasury(address indexed treasury, uint256 minted);
 
