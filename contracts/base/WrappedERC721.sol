@@ -196,6 +196,8 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         address currency,
         uint64 deadline
     ) external override nonReentrant {
+        revertIfInvalidCurrency(currency != address(0));
+
         _makeOffer(tokenId, price, currency, deadline);
 
         INFTGaugeFactory(factory).executePayment(currency, msg.sender, price);
