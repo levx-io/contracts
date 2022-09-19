@@ -17,10 +17,6 @@ interface INFTGaugeFactory {
 
     function discountToken() external view returns (address);
 
-    function target() external view returns (address);
-
-    function targetVersion() external view returns (uint256);
-
     function feeRatio() external view returns (uint256);
 
     function currencyConverter(address currency) external view returns (address);
@@ -35,7 +31,7 @@ interface INFTGaugeFactory {
 
     function feesLength(address token) external view returns (uint256);
 
-    function upgradeTarget(address target) external;
+    function killGauge(address addr) external;
 
     function updateCurrencyConverter(address token, address converter) external;
 

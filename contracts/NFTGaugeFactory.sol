@@ -25,8 +25,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     address public immutable override votingEscrow;
     address public immutable override discountToken;
 
-    address public override target;
-    uint256 public override targetVersion;
+    address public _target;
 
     uint256 public override feeRatio;
     mapping(address => address) public override currencyConverter;
@@ -51,20 +50,19 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
 
         NFTGauge gauge = new NFTGauge();
         gauge.initialize(_controller, address(0));
-        target = address(gauge);
+        _target = address(gauge);
     }
 
     function feesLength(address token) external view override returns (uint256) {
         return fees[token].length;
     }
 
-    function upgradeTarget(address _target) external override onlyOwner {
-        target = _target;
-
-        uint256 version = targetVersion + 1;
-        targetVersion = version;
-
-        emit UpgradeTarget(_target, version);
+    /**
+     * @notice Toggle the killed status of the gauge
+     * @param addr Gauge address
+     */
+    function killGauge(address addr) external override onlyOwner {
+        NFTGauge(addr).killMe();
     }
 
     function updateCurrencyConverter(address token, address converter) external override onlyOwner {
@@ -84,7 +82,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     function createNFTGauge(address nftContract) external override returns (address gauge) {
         require(gauges[nftContract] == address(0), "NFTGF: GAUGE_CREATED");
 
-        gauge = _createClone(target);
+        gauge = _createClone(_target);
         INFTGauge(gauge).initialize(nftContract, minter);
 
         gauges[nftContract] = gauge;

@@ -4,7 +4,6 @@ pragma solidity ^0.8.15;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IGaugeController.sol";
 import "./interfaces/IVotingEscrow.sol";
-import "./interfaces/IGauge.sol";
 import "./libraries/Math.sol";
 
 /**
@@ -242,14 +241,6 @@ contract GaugeController is Ownable, IGaugeController {
      */
     function increaseGaugeWeight(uint256 increment) external override {
         _increaseGaugeWeight(increment);
-    }
-
-    /**
-     * @notice Toggle the killed status of the gauge
-     * @param addr Gauge address
-     */
-    function killGauge(address addr) external override onlyOwner {
-        IGauge(addr).killMe();
     }
 
     /**

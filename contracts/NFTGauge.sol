@@ -93,7 +93,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
      * @notice Toggle the killed status of the gauge
      */
     function killMe() external override {
-        revertIfForbidden(msg.sender == controller);
+        revertIfForbidden(msg.sender == factory);
         isKilled = !isKilled;
     }
 
