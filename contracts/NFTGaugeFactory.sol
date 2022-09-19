@@ -116,7 +116,9 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
 
         address escrow = votingEscrow;
         IVotingEscrow(escrow).checkpoint();
-        fees[token].push(Fee(uint64(block.timestamp), uint192((amount * 1e18) / IVotingEscrow(escrow).totalSupply())));
+        fees[token].push(
+            Fee(uint64(block.timestamp), ((amount * 1e18) / IVotingEscrow(escrow).totalSupply()).toUint192())
+        );
 
         emit DistributeFees(token, fees[token].length - 1, amount);
     }
