@@ -447,12 +447,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
             IGaugeController(controller).increaseGaugeWeight(amountETH / 1e18);
         }
 
-        uint256 fee;
-        if (currency == address(0)) {
-            fee = INFTGaugeFactory(_factory).distributeFeesETH{value: amount}();
-        } else {
-            fee = INFTGaugeFactory(_factory).distributeFees(currency, amount);
-        }
+        uint256 fee = INFTGaugeFactory(_factory).distributeFees(currency, amount);
+        Tokens.safeTransfer(currency, _factory, fee, _weth);
 
         uint256 dividend;
         uint256 sum = _getSum(tokenId);

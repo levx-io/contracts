@@ -45,8 +45,6 @@ interface INFTGaugeFactory {
         uint256 amount
     ) external;
 
-    function distributeFeesETH() external payable returns (uint256 amountFee);
-
     function distributeFees(address token, uint256 amount) external returns (uint256 amountFee);
 
     function claimFees(address token, uint256 to) external;

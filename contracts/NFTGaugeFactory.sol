@@ -53,6 +53,10 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         _target = address(gauge);
     }
 
+    receive() external payable {
+        // Empty
+    }
+
     function feesLength(address token) external view override returns (uint256) {
         return fees[token].length;
     }
@@ -102,21 +106,13 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         IERC20(currency).safeTransferFrom(from, msg.sender, amount);
     }
 
-    function distributeFeesETH() external payable override returns (uint256 amountFee) {
-        amountFee = (msg.value * feeRatio) / 10000;
-        _distributeFees(address(0), amountFee);
-    }
-
     function distributeFees(address token, uint256 amount) external override returns (uint256 amountFee) {
+        require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
+
         amountFee = (amount * feeRatio) / 10000;
         if (token == discountToken) {
             amountFee /= 2;
         }
-        _distributeFees(token, amountFee);
-    }
-
-    function _distributeFees(address token, uint256 amount) internal {
-        require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
 
         address escrow = votingEscrow;
         IVotingEscrow(escrow).checkpoint();
