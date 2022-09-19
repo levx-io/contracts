@@ -10,8 +10,8 @@ interface IToken {
 }
 
 contract Minter is IMinter {
-    uint256 constant RATE_DENOMINATOR = 1e18;
-    uint256 constant INFLATION_DELAY = 86400;
+    uint256 internal constant RATE_DENOMINATOR = 1e18;
+    uint256 internal constant INFLATION_DELAY = 86400;
 
     address public immutable override token;
     address public immutable override controller;
