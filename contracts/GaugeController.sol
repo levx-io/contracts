@@ -316,7 +316,7 @@ contract GaugeController is Ownable, IGaugeController {
             uint256 powerUsed = voteUserPower[user];
             powerUsed = powerUsed + newSlope.power - oldSlope.power;
             voteUserPower[user] = powerUsed;
-            require((powerUsed >= 0) && (powerUsed <= 10000), "GC: USED_TOO_MUCH_POWER");
+            require(powerUsed <= 10000, "GC: USED_TOO_MUCH_POWER");
 
             /// Remove old and schedule new slope changes
             _updateSlopeChanges(
