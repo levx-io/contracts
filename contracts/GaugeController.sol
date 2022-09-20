@@ -417,7 +417,7 @@ contract GaugeController is Ownable, IGaugeController {
         if (t > block.timestamp) t -= _interval;
         uint256 pt = pointsTotal[t];
 
-        for (int128 gaugeType; gaugeType < 100; ) {
+        for (int128 gaugeType; gaugeType < 300; ) {
             if (gaugeType == nGaugeTypes) break;
             _getSum(gaugeType);
             _getTypeWeight(gaugeType);
@@ -432,7 +432,7 @@ contract GaugeController is Ownable, IGaugeController {
             t += _interval;
             pt = 0;
             // Scales as n_types * n_unchecked_weeks (hopefully 1 at most)
-            for (int128 gaugeType; gaugeType < 100; ) {
+            for (int128 gaugeType; gaugeType < 300; ) {
                 if (gaugeType == nGaugeTypes) break;
                 uint256 typeSum = pointsSum[gaugeType][t].bias;
                 uint256 typeWeight = pointsTypeWeight[gaugeType][t];
