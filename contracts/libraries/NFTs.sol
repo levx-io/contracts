@@ -15,6 +15,23 @@ library NFTs {
         }
     }
 
+    function transferFrom(
+        address token,
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal {
+        if (token == CRYPTOPUNKS && from != address(this)) {
+            // ICryptoPunksMarket.offerPunkForSaleToAddress() should have been called by the owner prior to this call
+            ICryptoPunksMarket(token).buyPunk(tokenId);
+            if (to != address(this)) {
+                ICryptoPunksMarket(token).transferPunk(to, tokenId);
+            }
+        } else {
+            IERC721(token).transferFrom(from, to, tokenId);
+        }
+    }
+
     function safeTransferFrom(
         address token,
         address from,

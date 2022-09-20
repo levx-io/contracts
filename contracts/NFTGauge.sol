@@ -14,7 +14,7 @@ import "./libraries/NFTs.sol";
 import "./libraries/VotingEscrowHelper.sol";
 import "./libraries/Errors.sol";
 
-contract NFTGauge is WrappedERC721, INFTGauge, IERC721Receiver {
+contract NFTGauge is WrappedERC721, INFTGauge {
     struct Dividend {
         uint64 timestamp;
         uint192 amountPerShare;
@@ -234,7 +234,7 @@ contract NFTGauge is WrappedERC721, INFTGauge, IERC721Receiver {
 
         emit Wrap(tokenId, to);
 
-        NFTs.safeTransferFrom(nftContract, msg.sender, address(this), tokenId);
+        NFTs.transferFrom(nftContract, msg.sender, address(this), tokenId);
     }
 
     function unwrap(uint256 tokenId, address to) external override {
@@ -248,7 +248,7 @@ contract NFTGauge is WrappedERC721, INFTGauge, IERC721Receiver {
 
         emit Unwrap(tokenId, to);
 
-        NFTs.safeTransferFrom(nftContract, address(this), to, tokenId);
+        NFTs.transferFrom(nftContract, address(this), to, tokenId);
     }
 
     function vote(uint256 tokenId, uint256 userWeight) public override {
@@ -472,14 +472,5 @@ contract NFTGauge is WrappedERC721, INFTGauge, IERC721Receiver {
         super._beforeTokenTransfer(from, to, tokenId);
 
         if (from != address(0) && to != address(0)) userCheckpoint(tokenId, from);
-    }
-
-    function onERC721Received(
-        address,
-        address,
-        uint256,
-        bytes calldata
-    ) external override returns (bytes4) {
-        return IERC721Receiver.onERC721Received.selector;
     }
 }
