@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
+import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "./base/WrappedERC721.sol";
 import "./interfaces/INFTGauge.sol";
 import "./interfaces/IGaugeController.sol";
@@ -13,7 +14,7 @@ import "./libraries/NFTs.sol";
 import "./libraries/VotingEscrowHelper.sol";
 import "./libraries/Errors.sol";
 
-contract NFTGauge is WrappedERC721, INFTGauge {
+contract NFTGauge is WrappedERC721, INFTGauge, IERC721Receiver {
     struct Dividend {
         uint64 timestamp;
         uint192 amountPerShare;
@@ -471,5 +472,14 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         super._beforeTokenTransfer(from, to, tokenId);
 
         if (from != address(0) && to != address(0)) userCheckpoint(tokenId, from);
+    }
+
+    function onERC721Received(
+        address,
+        address,
+        uint256,
+        bytes calldata
+    ) external override returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
     }
 }
