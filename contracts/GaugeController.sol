@@ -397,7 +397,7 @@ contract GaugeController is Ownable, IGaugeController {
         pointsSum[gaugeType][nextTime].bias = newSum;
         timeSum[gaugeType] = nextTime;
 
-        totalWeight = totalWeight + newSum * typeWeight - oldSum * typeWeight;
+        totalWeight += increment * typeWeight;
         pointsTotal[nextTime] = totalWeight;
         timeTotal = nextTime;
 
