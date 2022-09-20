@@ -298,37 +298,50 @@ contract GaugeController is Ownable, IGaugeController {
         require(lockEnd > nextTime, "GC: LOCK_EXPIRES_TOO_EARLY");
         require((userWeight >= 0) && (userWeight <= 10000), "GC: VOTING_POWER_ALL_USED");
 
-        // Avoid stack too deep error
-        {
-            int128 gaugeType = _gaugeTypes[msg.sender] - 1;
-            require(gaugeType >= 0, "GC: GAUGE_NOT_ADDED");
-            // Prepare slopes and biases in memory
-            VotedSlope memory oldSlope = voteUserSlopes[user][msg.sender];
-            uint256 oldDt;
-            if (oldSlope.end > nextTime) oldDt = oldSlope.end - nextTime;
-            VotedSlope memory newSlope = VotedSlope({
-                slope: (slope * userWeight) / 10000,
-                end: lockEnd,
-                power: userWeight
-            });
+        int128 gaugeType = _gaugeTypes[msg.sender] - 1;
+        require(gaugeType >= 0, "GC: GAUGE_NOT_ADDED");
+        // Prepare slopes and biases in memory
+        VotedSlope memory oldSlope = voteUserSlopes[user][msg.sender];
+        uint256 oldDt;
+        if (oldSlope.end > nextTime) oldDt = oldSlope.end - nextTime;
+        uint256 oldBias = oldSlope.slope * oldDt;
+        VotedSlope memory newSlope = VotedSlope({slope: (slope * userWeight) / 10000, end: lockEnd, power: userWeight});
+        uint256 newBias = newSlope.slope * (lockEnd - nextTime);
 
-            // Check and update powers (weights) used
-            uint256 powerUsed = voteUserPower[user];
-            powerUsed = powerUsed + newSlope.power - oldSlope.power;
-            voteUserPower[user] = powerUsed;
-            require(powerUsed <= 10000, "GC: USED_TOO_MUCH_POWER");
+        // Check and update powers (weights) used
+        uint256 powerUsed = voteUserPower[user];
+        powerUsed = powerUsed + newSlope.power - oldSlope.power;
+        voteUserPower[user] = powerUsed;
+        require(powerUsed <= 10000, "GC: USED_TOO_MUCH_POWER");
 
-            /// Remove old and schedule new slope changes
-            _updateSlopeChanges(
-                msg.sender,
-                nextTime,
-                gaugeType,
-                oldSlope.slope * oldDt,
-                newSlope.slope * (lockEnd - nextTime),
-                oldSlope,
-                newSlope
-            );
+        /// Remove old and schedule new slope changes
+        // Remove slope changes for old slopes
+        // Schedule recording of initial slope for next_time
+        pointsWeight[msg.sender][nextTime].bias = Math.max(_getWeight(msg.sender) + newBias, oldBias) - oldBias;
+        pointsSum[gaugeType][nextTime].bias = Math.max(_getSum(gaugeType) + newBias, oldBias) - oldBias;
+        if (oldSlope.end > nextTime) {
+            pointsWeight[msg.sender][nextTime].slope =
+                Math.max(pointsWeight[msg.sender][nextTime].slope + newSlope.slope, oldSlope.slope) -
+                oldSlope.slope;
+            pointsSum[gaugeType][nextTime].slope =
+                Math.max(pointsSum[gaugeType][nextTime].slope + newSlope.slope, oldSlope.slope) -
+                oldSlope.slope;
+        } else {
+            pointsWeight[msg.sender][nextTime].slope += newSlope.slope;
+            pointsSum[gaugeType][nextTime].slope += newSlope.slope;
         }
+        if (oldSlope.end > block.timestamp) {
+            // Cancel old slope changes if they still didn't happen
+            _changesWeight[msg.sender][oldSlope.end] -= oldSlope.slope;
+            _changesSum[gaugeType][oldSlope.end] -= oldSlope.slope;
+        }
+        // Add slope changes for new slopes
+        _changesWeight[msg.sender][newSlope.end] += newSlope.slope;
+        _changesSum[gaugeType][newSlope.end] += newSlope.slope;
+
+        _getTotal();
+
+        voteUserSlopes[user][msg.sender] = newSlope;
 
         emit VoteForGauge(block.timestamp, user, msg.sender, userWeight);
     }
@@ -544,43 +557,5 @@ contract GaugeController is Ownable, IGaugeController {
             }
             return pt.bias;
         } else return 0;
-    }
-
-    function _updateSlopeChanges(
-        address addr,
-        uint256 nextTime,
-        int128 gaugeType,
-        uint256 oldBias,
-        uint256 newBias,
-        VotedSlope memory oldSlope,
-        VotedSlope memory newSlope
-    ) internal {
-        // Remove slope changes for old slopes
-        // Schedule recording of initial slope for next_time
-        pointsWeight[addr][nextTime].bias = Math.max(_getWeight(addr) + newBias, oldBias) - oldBias;
-        pointsSum[gaugeType][nextTime].bias = Math.max(_getSum(gaugeType) + newBias, oldBias) - oldBias;
-        if (oldSlope.end > nextTime) {
-            pointsWeight[addr][nextTime].slope =
-                Math.max(pointsWeight[addr][nextTime].slope + newSlope.slope, oldSlope.slope) -
-                oldSlope.slope;
-            pointsSum[gaugeType][nextTime].slope =
-                Math.max(pointsSum[gaugeType][nextTime].slope + newSlope.slope, oldSlope.slope) -
-                oldSlope.slope;
-        } else {
-            pointsWeight[addr][nextTime].slope += newSlope.slope;
-            pointsSum[gaugeType][nextTime].slope += newSlope.slope;
-        }
-        if (oldSlope.end > block.timestamp) {
-            // Cancel old slope changes if they still didn't happen
-            _changesWeight[addr][oldSlope.end] -= oldSlope.slope;
-            _changesSum[gaugeType][oldSlope.end] -= oldSlope.slope;
-        }
-        // Add slope changes for new slopes
-        _changesWeight[addr][newSlope.end] += newSlope.slope;
-        _changesSum[gaugeType][newSlope.end] += newSlope.slope;
-
-        _getTotal();
-
-        voteUserSlopes[msg.sender][addr] = newSlope;
     }
 }
