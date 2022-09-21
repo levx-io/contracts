@@ -349,26 +349,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         return length > 0 ? snapshots[length - 1] : VotedSlope(0, 0, 0, 0);
     }
 
-    /**
-     * @dev `_updateValueAtNow` is used to update snapshots
-     * @param snapshots The history of data being updated
-     * @param value VotedSlope
-     */
-    function _updateValueAtNow(VotedSlope[] storage snapshots, VotedSlope memory value) internal {
-        if ((snapshots.length == 0) || (snapshots[snapshots.length - 1].timestamp < block.timestamp)) {
-            VotedSlope storage newCheckPoint = snapshots.push();
-            newCheckPoint.slope = value.slope;
-            newCheckPoint.power = value.power;
-            newCheckPoint.end = value.end;
-            newCheckPoint.timestamp = uint64(block.timestamp);
-        } else {
-            VotedSlope storage oldCheckPoint = snapshots[snapshots.length - 1];
-            oldCheckPoint.slope = value.slope;
-            oldCheckPoint.power = value.power;
-            oldCheckPoint.end = value.end;
-        }
-    }
-
     function _getSum(uint256 tokenId) internal returns (uint256) {
         uint256 t = timeSum[tokenId];
         if (t > 0) {
@@ -421,7 +401,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         // Check and update powers (weights) used
         powerUsed = voteUserPower[user] + newSlope.power - oldSlope.power;
         voteUserPower[user] = powerUsed;
-        _updateValueAtNow(voteUserSlopes[tokenId][user], newSlope);
+        voteUserSlopes[tokenId][user].push(newSlope);
 
         /// Remove old and schedule new slope changes
         uint256 oldBias = oldSlope.slope * oldDt;
