@@ -313,10 +313,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     /**
-     * @dev `_getValueAt` retrieves the number of tokens at a given time
+     * @dev `_getValueAt` retrieves VotedSlope at a given time
      * @param snapshots The history of values being queried
      * @param timestamp The block timestamp to retrieve the value at
-     * @return The weight at `timestamp`
+     * @return VotedSlope at `timestamp`
      */
     function _getValueAt(VotedSlope[] storage snapshots, uint256 timestamp) internal view returns (VotedSlope memory) {
         if (snapshots.length == 0) return VotedSlope(0, 0, 0, 0);
@@ -340,6 +340,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         return snapshots[min];
     }
 
+    /**
+     * @param snapshots The history of data being updated
+     * @return the last snapshot
+     */
     function _lastValue(VotedSlope[] storage snapshots) internal view returns (VotedSlope memory) {
         uint256 length = snapshots.length;
         return length > 0 ? snapshots[length - 1] : VotedSlope(0, 0, 0, 0);
@@ -348,6 +352,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     /**
      * @dev `_updateValueAtNow` is used to update snapshots
      * @param snapshots The history of data being updated
+     * @param value VotedSlope
      */
     function _updateValueAtNow(VotedSlope[] storage snapshots, VotedSlope memory value) internal {
         if ((snapshots.length == 0) || (snapshots[snapshots.length - 1].timestamp < block.timestamp)) {
