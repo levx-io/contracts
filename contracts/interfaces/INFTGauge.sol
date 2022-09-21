@@ -73,5 +73,9 @@ interface INFTGauge is IWrappedERC721 {
 
     function revoke(uint256 tokenId) external;
 
-    function claimDividends(address token, uint256 tokenId) external;
+    function claimDividends(
+        address token,
+        uint256 tokenId,
+        uint256 to
+    ) external;
 }

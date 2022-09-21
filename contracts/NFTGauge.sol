@@ -285,26 +285,28 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         emit Vote(tokenId, msg.sender, 0);
     }
 
-    function claimDividends(address token, uint256 tokenId) external override {
+    function claimDividends(
+        address token,
+        uint256 tokenId,
+        uint256 to
+    ) external override {
+        require(to < _dividends[token][tokenId].length, "NFTGF: INDEX_OUT_OF_RANGE");
+
+        uint256 from = _lastDividendClaimed[token][tokenId][msg.sender];
+
         uint256 amount;
-        uint256 last = _lastDividendClaimed[token][tokenId][msg.sender];
-        uint256 i;
-        while (i < 500) {
-            uint256 id = last + i;
-            if (id >= _dividends[token][tokenId].length) break;
-
-            Dividend memory dividend = _dividends[token][tokenId][id];
+        for (uint256 i = from; i < to; ) {
+            Dividend memory dividend = _dividends[token][tokenId][i];
             uint256 balance = VotingEscrowHelper.balanceOf(votingEscrow, msg.sender, dividend.timestamp);
-            uint256 userWeight = _getValueAt(voteUserSlopes[tokenId][msg.sender], dividend.timestamp).power;
-            amount += (balance * userWeight * dividend.amountPerShare) / 10000 / 1e18;
-
+            if (balance > 0) {
+                uint256 userWeight = _getValueAt(voteUserSlopes[tokenId][msg.sender], dividend.timestamp).power;
+                amount += (balance * userWeight * dividend.amountPerShare) / 10000 / 1e18;
+            }
             unchecked {
                 ++i;
             }
         }
-
-        revertIfNoAmount(amount > 0);
-        _lastDividendClaimed[token][tokenId][msg.sender] = last + i;
+        _lastDividendClaimed[token][tokenId][msg.sender] = to;
 
         emit ClaimDividends(token, tokenId, amount, msg.sender);
         Tokens.safeTransfer(token, msg.sender, amount, _weth);
