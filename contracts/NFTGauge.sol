@@ -176,32 +176,36 @@ contract NFTGauge is WrappedERC721, INFTGauge {
             VotedSlope memory slope = _lastValue(voteUserSlopes[tokenId][user]);
             uint256 ts = periodTimestamp[checkpoint];
             if (ts <= slope.end) {
-                uint256 bias;
-                if (block.timestamp < slope.end) {
-                    bias = (slope.slope * (2 * slope.end - ts - block.timestamp)) / 2; // average value from ts to now
-                } else {
-                    bias = (slope.slope * (slope.end - ts)) / 2; // average value from ts to lockEnd
-                }
-
-                uint256 time = block.timestamp - ts;
-                uint256 wrapped;
+                uint256 timeWeightedBiasSum;
                 uint256 length = _wraps[tokenId].length;
-                for (uint256 i; i < 500 && i < length; ) {
+                // 1. we will depict a graph where x-axis is time and y-axis is bias of the user
+                // 2. as time goes by, the user's bias will decrease and there could be multiple _wraps
+                // 3. we'll get the user's time-weighted bias-sum only for the time being where _wraps exist
+                // 4. to get time-weighted bias-sum, we'll sum up all areas under the graph separated by each wrap
+                // 5. this won't loop too many times since each (un)wrapping needs to be done after _weightVoteDelay
+                for (uint256 i; i < length; ) {
                     Wrap_ memory _wrap = _wraps[tokenId][length - i - 1];
                     (uint256 start, uint256 end) = (_wrap.start, _wrap.end);
+                    if (start < ts) start = ts;
                     if (end == 0) end = block.timestamp;
-                    if (start < ts) {
-                        wrapped += (end - ts);
-                        break;
-                    } else wrapped += (end - start);
+                    if (end < slope.end) {
+                        // pentagon shape (x: time, y: bias)
+                        timeWeightedBiasSum += (slope.slope * (slope.end * 2 - end - start) * (end - start)) / 2;
+                    } else {
+                        // triangle shape (x: time, y: bias)
+                        timeWeightedBiasSum += ((slope.slope * (slope.end - start)) * (end - start)) / 2;
+                    }
 
+                    if (start == ts) break;
                     unchecked {
                         ++i;
                     }
                 }
 
-                integrateFraction[tokenId][user] += (bias * dIntegrate * wrapped * 2) / time / 3 / 1e18; // 67% goes to voters
-                integrateFraction[tokenId][ownerOf(tokenId)] += (bias * dIntegrate * wrapped) / time / 3 / 1e18; // 33% goes to the owner
+                // time-weighted bias-sum divided time gives us the average bias of the user for dt
+                uint256 dt = block.timestamp - ts;
+                integrateFraction[tokenId][user] += (timeWeightedBiasSum * dIntegrate * 2) / dt / 3 / 1e18; // 67% goes to voters
+                integrateFraction[tokenId][ownerOf(tokenId)] += (timeWeightedBiasSum * dIntegrate) / dt / 3 / 1e18; // 33% goes to the owner
             }
         }
         periodOf[tokenId][user] = _period;
