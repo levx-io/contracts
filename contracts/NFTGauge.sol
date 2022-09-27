@@ -448,7 +448,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
             uint256 interval = _interval;
             dividend = ((amount - fee) * _wraps[tokenId][_wraps[tokenId].length - 1].dividendRatio) / 10000;
             _dividends[currency][tokenId].push(
-                Dividend(uint64((block.timestamp / interval) * interval), uint192((dividend * 1e18) / sum))
+                Dividend(uint64(((block.timestamp + interval) / interval) * interval), uint192((dividend * 1e18) / sum))
             );
             emit DistributeDividend(currency, tokenId, dividend);
         }
