@@ -443,14 +443,17 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         Tokens.safeTransfer(currency, _factory, fee, _weth);
 
         uint256 dividend;
-        uint256 sum = _getSum(tokenId);
-        if (sum > 0) {
+        uint256 length = _wraps[tokenId].length;
+        if (length > 0) {
+            _getSum(tokenId);
             uint256 interval = _interval;
-            dividend = ((amount - fee) * _wraps[tokenId][_wraps[tokenId].length - 1].dividendRatio) / 10000;
-            _dividends[currency][tokenId].push(
-                Dividend(uint64(((block.timestamp + interval) / interval) * interval), uint192((dividend * 1e18) / sum))
-            );
-            emit DistributeDividend(currency, tokenId, dividend);
+            uint256 time = (block.timestamp / interval) * interval;
+            uint256 sum = pointsSum[tokenId][time].bias;
+            if (sum > 0) {
+                dividend = ((amount - fee) * _wraps[tokenId][length - 1].dividendRatio) / 10000;
+                _dividends[currency][tokenId].push(Dividend(uint64(time), uint192((dividend * 1e18) / sum)));
+                emit DistributeDividend(currency, tokenId, dividend);
+            }
         }
         Tokens.safeTransfer(currency, to, amount - fee - dividend, _weth);
     }
