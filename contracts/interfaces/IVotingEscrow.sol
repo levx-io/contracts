@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 interface IVotingEscrow {
-    event SetMigrator(address indexed account);
     event SetDelegate(address indexed account, bool isDelegate);
     event Deposit(
         address indexed provider,
@@ -12,9 +11,7 @@ interface IVotingEscrow {
         int128 indexed _type,
         uint256 ts
     );
-    event Cancel(address indexed provider, uint256 value, uint256 discount, uint256 penaltyRate, uint256 ts);
     event Withdraw(address indexed provider, uint256 value, uint256 discount, uint256 ts);
-    event Migrate(address indexed provider, uint256 value, uint256 discount, uint256 ts);
     event Supply(uint256 prevSupply, uint256 supply);
 
     function interval() external view returns (uint256);
@@ -29,13 +26,9 @@ interface IVotingEscrow {
 
     function decimals() external view returns (uint8);
 
-    function migrator() external view returns (address);
-
     function isDelegate(address account) external view returns (bool);
 
     function supply() external view returns (uint256);
-
-    function migrated(address account) external view returns (bool);
 
     function delegateAt(address account, uint256 index) external view returns (address);
 
@@ -83,8 +76,6 @@ interface IVotingEscrow {
 
     function unlockTime(address _addr) external view returns (uint256);
 
-    function setMigrator(address _migrator) external;
-
     function setDelegate(address account, bool _isDelegate) external;
 
     function checkpoint() external;
@@ -110,11 +101,7 @@ interface IVotingEscrow {
 
     function increaseUnlockTime(uint256 _duration) external;
 
-    function cancel() external;
-
     function withdraw() external;
-
-    function migrate() external;
 
     function balanceOf(address addr) external view returns (uint256);
 
