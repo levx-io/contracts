@@ -2,11 +2,11 @@
 pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./interfaces/IUniswapV2Pair.sol";
-import "./VotingEscrowDelegate.sol";
-import "./interfaces/IVotingEscrowMigrator.sol";
+import "../interfaces/IUniswapV2Pair.sol";
+import "../base/VotingEscrowDelegate.sol";
+import "../interfaces/IVotingEscrowMigrator.sol";
 
-contract LPVotingEscrowDelegate is VotingEscrowDelegate {
+contract LPVotingEscrowDelegateLegacy is VotingEscrowDelegate {
     using SafeERC20 for IERC20;
 
     struct LockedBalance {

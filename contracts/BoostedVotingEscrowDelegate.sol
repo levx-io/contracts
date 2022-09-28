@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "./VotingEscrowDelegate.sol";
+import "./base/VotingEscrowDelegate.sol";
 
 contract BoostedVotingEscrowDelegate is VotingEscrowDelegate {
     uint256 public immutable minDuration;

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "./interfaces/IVotingEscrowDelegate.sol";
-import "./interfaces/IVotingEscrow.sol";
-import "./interfaces/INFT.sol";
+import "../interfaces/IVotingEscrowDelegate.sol";
+import "../interfaces/IVotingEscrow.sol";
+import "../interfaces/INFT.sol";
 
 abstract contract VotingEscrowDelegate is IVotingEscrowDelegate {
     address public immutable ve;
