@@ -71,7 +71,7 @@ const setupTest = async () => {
  * st_votes : [(int, int), (int, int), (int, int)]
  * (vote for gauge 0, vote for gauge 1) for each account, in units of 10%
  **/
-describe.only("GaugeController", () => {
+describe("GaugeController", () => {
     beforeEach(async () => {
         await ethers.provider.send("hardhat_reset", []);
     });

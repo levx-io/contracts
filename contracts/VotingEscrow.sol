@@ -8,7 +8,6 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/IVotingEscrowMigrator.sol";
 import "./interfaces/IVotingEscrowDelegate.sol";
-import "./interfaces/IVotingEscrowLegacy.sol";
 import "./libraries/Integers.sol";
 
 /**
@@ -170,6 +169,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
         // in case interval is different from legacy
         start = ((start + interval) / interval) * interval;
         end = (end / interval) * interval;
+        if (start >= end) end += interval;
 
         LockedBalance memory lock = LockedBalance(amount, discount, start, end);
         locked[account] = lock;
@@ -317,8 +317,6 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
         LockedBalance memory locked_balance,
         int128 _type
     ) internal {
-        require(IVotingEscrowLegacy(legacy).migrated(_addr), "VE: MIGRATE_FIRST");
-
         LockedBalance memory _locked = locked_balance;
         uint256 supply_before = supply;
 
