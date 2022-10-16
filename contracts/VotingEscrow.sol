@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/IVotingEscrowMigrator.sol";
 import "./interfaces/IVotingEscrowDelegate.sol";
+import "./interfaces/IVotingEscrowLegacy.sol";
 import "./libraries/Integers.sol";
 
 /**
@@ -64,7 +65,9 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
     string public override name;
     string public override symbol;
     uint8 public immutable override decimals;
+    address public immutable legacy;
 
+    mapping(address => bool) migrated;
     mapping(address => bool) public override isDelegate;
 
     uint256 public override supply;
@@ -82,7 +85,8 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
         string memory _name,
         string memory _symbol,
         uint256 _interval,
-        uint256 _maxDuration
+        uint256 _maxDuration,
+        address _legacy
     ) {
         token = _token;
         name = _name;
@@ -94,6 +98,8 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
 
         pointHistory[0].blk = block.number;
         pointHistory[0].ts = block.timestamp;
+
+        legacy = _legacy;
     }
 
     modifier onlyDelegate {
@@ -156,10 +162,18 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
         int128 discount,
         uint256 start,
         uint256 end,
-        address[] calldata _delegates
+        address[] calldata
     ) external override {
-        locked[account] = LockedBalance(amount, discount, start, end);
-        delegateAt[account] = _delegates;
+        require(msg.sender == legacy, "VE: FORBIDDEN");
+        require(locked[account].amount == 0, "VE: EXISTING_LOCK_FOUND");
+
+        // in case interval is different from legacy
+        start = ((start + interval) / interval) * interval;
+        end = (end / interval) * interval;
+
+        LockedBalance memory lock = LockedBalance(amount, discount, start, end);
+        locked[account] = lock;
+        _checkpoint(account, LockedBalance(0, 0, 0, 0), lock);
     }
 
     /**
@@ -303,6 +317,8 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
         LockedBalance memory locked_balance,
         int128 _type
     ) internal {
+        require(IVotingEscrowLegacy(legacy).migrated(_addr), "VE: MIGRATE_FIRST");
+
         LockedBalance memory _locked = locked_balance;
         uint256 supply_before = supply;
 
