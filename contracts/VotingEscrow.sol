@@ -38,6 +38,9 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
     using Integers for int128;
     using Integers for uint256;
 
+    event SetDelegateOfLegacy(address indexed legacy, address indexed delegate);
+    event Migrate(address indexed account);
+
     struct Point {
         int128 bias;
         int128 slope; // - dweight / dt
@@ -56,6 +59,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
     int128 public constant CREATE_LOCK_TYPE = 1;
     int128 public constant INCREASE_LOCK_AMOUNT = 2;
     int128 public constant INCREASE_UNLOCK_TIME = 3;
+    int128 public constant MIGRATE = 4;
     uint256 internal constant MULTIPLIER = 1e18;
 
     uint256 public immutable override interval;
@@ -67,6 +71,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
     address public immutable legacy;
 
     mapping(address => bool) migrated;
+    mapping(address => address) public delegateOfLegacy;
     mapping(address => bool) public override isDelegate;
 
     uint256 public override supply;
@@ -149,6 +154,12 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
         return locked[_addr].end;
     }
 
+    function setDelegateOfLegacy(address _legacy, address delegate) external onlyOwner {
+        delegateOfLegacy[_legacy] = delegate;
+
+        emit SetDelegateOfLegacy(legacy, delegate);
+    }
+
     function setDelegate(address account, bool _isDelegate) external override onlyOwner {
         isDelegate[account] = _isDelegate;
 
@@ -161,7 +172,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
         int128 discount,
         uint256 start,
         uint256 end,
-        address[] calldata
+        address[] calldata delegates
     ) external override {
         require(msg.sender == legacy, "VE: FORBIDDEN");
         require(locked[account].amount == 0, "VE: EXISTING_LOCK_FOUND");
@@ -173,7 +184,26 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
 
         LockedBalance memory lock = LockedBalance(amount, discount, start, end);
         locked[account] = lock;
+
+        uint256 supply_before = supply;
+        supply = supply_before + amount.toUint256();
+
         _checkpoint(account, LockedBalance(0, 0, 0, 0), lock);
+
+        for (uint256 i; i < delegates.length; ) {
+            address delegate = delegateOfLegacy[delegates[i]];
+            if (delegate != address(0)) {
+                IVotingEscrowMigrator(delegate).migrate(account, amount, discount, start, end, new address[](0));
+                _pushDelegate(account, delegate);
+            }
+            unchecked {
+                i++;
+            }
+        }
+
+        emit Deposit(account, amount.toUint256(), discount.toUint256(), end, MIGRATE, block.timestamp);
+        emit Supply(supply_before, supply_before + amount.toUint256());
+        emit Migrate(account);
     }
 
     /**

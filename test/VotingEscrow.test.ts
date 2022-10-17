@@ -87,7 +87,7 @@ const setupTest = async () => {
  *
  *  After the test is done, check all over again with balanceOfAt / totalSupplyAt
  **/
-describe.only("VotingEscrow", () => {
+describe("VotingEscrow", () => {
     beforeEach(async () => {
         await ethers.provider.send("hardhat_reset", []);
     });
@@ -343,7 +343,7 @@ describe.only("VotingEscrow", () => {
         expect(await ve.unlockTime(alice.address)).to.be.equal(end);
     });
 
-    it.only("should migrate()", async () => {
+    it("should migrate()", async () => {
         const { token, legacy, ve, alice, bob } = await setupTest();
 
         const amount = constants.WeiPerEther.mul(1000);

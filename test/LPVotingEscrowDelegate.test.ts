@@ -1,8 +1,8 @@
 import { ethers } from "hardhat";
 import chai, { expect } from "chai";
 import { solidity } from "ethereum-waffle";
-import { divf, expectApproxEqual, expectZero, getBlockTimestamp, mine, PRECISION_BASE, sleep } from "./utils";
-import { BigNumber, BigNumberish, constants, Signer, utils } from "ethers";
+import { divf, expectApproxEqual, expectZero, getBlockTimestamp, mine, sleep } from "./utils";
+import { BigNumber, BigNumberish, constants, Signer } from "ethers";
 import {
     ERC20Mock,
     LPVotingEscrowDelegate,
@@ -10,28 +10,24 @@ import {
     UniswapV2Factory,
     UniswapV2Pair,
     VotingEscrow,
-    VotingEscrowMigratorMock,
+    VotingEscrowLegacy,
 } from "../typechain";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signers";
 
 ethers.utils.Logger.setLogLevel(ethers.utils.Logger.levels.ERROR); // turn off warnings
 chai.use(solidity);
 
-const LOG_OFF = false;
-
-const H = 3600;
 const DAY = 86400;
-const NUMBER_OF_DAYS = 3;
+const NUMBER_OF_DAYS = 7;
+const INTERVAL_LEGACY = 3 * DAY;
 const INTERVAL = NUMBER_OF_DAYS * DAY;
-const MAX_NUMBER_OF_DAYS = 729;
-const MAX_DURATION = MAX_NUMBER_OF_DAYS * DAY;
-const TOL = PRECISION_BASE.mul(120).div(INTERVAL);
+const MAX_DURATION_LEGACY = 729 * DAY;
+const MAX_DURATION = 4 * 365 * DAY;
 
 const ONE = constants.WeiPerEther;
 const MIN_AMOUNT = BigNumber.from(10).pow(15).mul(333);
 const MAX_BOOST = BigNumber.from(10).pow(18).mul(1000);
 const MINIMUM_LIQUIDITY = 1000;
-const PENALTY_BASE = ONE;
 
 const setupTest = async () => {
     const signers = await ethers.getSigners();
@@ -49,14 +45,39 @@ const setupTest = async () => {
     const pair = Pair.attach(await factory.getPair(weth.address, token.address)) as UniswapV2Pair;
     const isToken1 = (await pair.token1()) == token.address;
 
-    const VE = await ethers.getContractFactory("VotingEscrow");
-    const ve = (await VE.deploy(token.address, "veToken", "VE", INTERVAL, MAX_DURATION)) as VotingEscrow;
+    const VELegacy = await ethers.getContractFactory("VotingEscrowLegacy");
+    const veLegacy = (await VELegacy.deploy(
+        token.address,
+        "veToken",
+        "VE",
+        INTERVAL_LEGACY,
+        MAX_DURATION_LEGACY
+    )) as VotingEscrowLegacy;
 
-    const Migrator = await ethers.getContractFactory("VotingEscrowMigratorMock");
-    const migrator = (await Migrator.deploy(ve.address)) as VotingEscrowMigratorMock;
+    const VE = await ethers.getContractFactory("VotingEscrow");
+    const ve = (await VE.deploy(
+        token.address,
+        "veToken",
+        "VE",
+        INTERVAL,
+        MAX_DURATION,
+        veLegacy.address
+    )) as VotingEscrow;
+    await veLegacy.setMigrator(ve.address);
 
     const DiscountToken = await ethers.getContractFactory("NFTMock");
     const discountToken = (await DiscountToken.deploy("Discount", "DISC")) as NFTMock;
+
+    const DelegateLegacy = await ethers.getContractFactory("LPVotingEscrowDelegateLegacy");
+    const delegateLegacy = (await DelegateLegacy.deploy(
+        veLegacy.address,
+        pair.address,
+        discountToken.address,
+        isToken1,
+        MIN_AMOUNT,
+        MAX_BOOST
+    )) as LPVotingEscrowDelegate;
+    await veLegacy.setDelegate(delegateLegacy.address, true);
 
     const Delegate = await ethers.getContractFactory("LPVotingEscrowDelegate");
     const delegate = (await Delegate.deploy(
@@ -65,9 +86,11 @@ const setupTest = async () => {
         discountToken.address,
         isToken1,
         MIN_AMOUNT,
-        MAX_BOOST
+        MAX_BOOST,
+        delegateLegacy.address
     )) as LPVotingEscrowDelegate;
     await ve.setDelegate(delegate.address, true);
+    await ve.setDelegateOfLegacy(delegateLegacy.address, delegate.address);
 
     const totalSupply = async (): Promise<BigNumber> => await ve["totalSupply()"]();
     const totalSupplyAt = async (block: number): Promise<BigNumber> => await ve.totalSupplyAt(block);
@@ -101,8 +124,9 @@ const setupTest = async () => {
         weth,
         token,
         pair,
+        veLegacy,
         ve,
-        migrator,
+        delegateLegacy,
         delegate,
         totalSupply,
         totalSupplyAt,
@@ -114,402 +138,78 @@ const setupTest = async () => {
     };
 };
 
-describe("LPVotingEscrowDelegate", () => {
+describe.only("LPVotingEscrowDelegate", () => {
     beforeEach(async () => {
         await ethers.provider.send("hardhat_reset", []);
     });
 
-    it("should createLock() and withdraw() with increasing LP", async () => {
-        const { ve, pair, delegate, alice, totalSupply, balanceOf, mintLPToken, getTokensInLP } = await setupTest();
-
-        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
-
-        expectZero(await totalSupply());
-        expectZero(await balanceOf(alice));
-
-        let balanceLP_alice = constants.Zero;
-        for (let i = 0; i < 100; i++) {
-            await mintLPToken(alice, ONE);
-            const lpTotal = await pair.totalSupply();
-            const circulatingLP = lpTotal;
-            const amountLP = ONE.sub(i === 0 ? MINIMUM_LIQUIDITY : 0);
-            balanceLP_alice = balanceLP_alice.add(amountLP);
-            expect(lpTotal).to.be.equal(ONE.mul(i + 1));
-            expect(await pair.balanceOf(alice.address)).to.be.equal(balanceLP_alice);
-
-            // Move to timing which is good for testing - beginning of a UTC week
-            const ts = await getBlockTimestamp();
-            await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
-            await mine();
-
-            await delegate.connect(alice).createLock(amountLP, MAX_DURATION);
-
-            await sleep(H);
-            await mine();
-
-            expect(await pair.balanceOf(alice.address)).to.be.equal(balanceLP_alice.sub(amountLP));
-            expect(await delegate.locked(alice.address)).to.be.equal(amountLP);
-            expect(await delegate.lockedTotal()).to.be.equal(amountLP);
-
-            const amountToken_alice = await getTokensInLP(amountLP);
-            let amountVE_alice = amountToken_alice.add(
-                amountToken_alice.mul(MAX_BOOST).mul(circulatingLP).div(lpTotal.pow(2))
-            );
-            if (amountVE_alice.gt(amountToken_alice.mul(333).div(10))) {
-                amountVE_alice = amountToken_alice.mul(333).div(10);
-            }
-            log(i, lpTotal, amountLP, MAX_BOOST.mul(100).mul(circulatingLP).div(lpTotal.pow(2)).toNumber() / 100);
-            expectApproxEqual(await totalSupply(), amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - 2 * H), TOL);
-            expectApproxEqual(await balanceOf(alice), amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - H), TOL);
-
-            await sleep(MAX_DURATION);
-            await mine();
-
-            expectZero(await balanceOf(alice));
-            await ve.connect(alice).withdraw();
-
-            expectZero(await totalSupply());
-            expectZero(await balanceOf(alice));
-        }
-    });
-
-    it("should createLock() and increaseAmount() with increasing amount out of fixed LP", async () => {
-        const { pair, delegate, alice, totalSupply, balanceOf, mintLPToken, getTokensInLP } = await setupTest();
-
-        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
-
-        expectZero(await totalSupply());
-        expectZero(await balanceOf(alice));
-
-        const lpTotal = ONE.mul(100);
-        await mintLPToken(alice, lpTotal);
-        expect(await pair.totalSupply()).to.be.equal(lpTotal);
-        expect(await pair.balanceOf(alice.address)).to.be.equal(lpTotal.sub(MINIMUM_LIQUIDITY));
-
-        // Move to timing which is good for testing - beginning of a UTC week
-        const ts = await getBlockTimestamp();
-        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
-        await mine();
-
-        let lpLockedTotal = constants.Zero;
-        let amountVE_alice = constants.Zero;
-        for (let i = 0; i < 100; i++) {
-            const amountLP = ONE.sub(i === 0 ? MINIMUM_LIQUIDITY : 0);
-            const circulatingLP = lpTotal.sub(lpLockedTotal);
-
-            if (i === 0) {
-                await delegate.connect(alice).createLock(amountLP, MAX_DURATION);
-            } else {
-                await delegate.connect(alice).increaseAmount(amountLP);
-            }
-            lpLockedTotal = lpLockedTotal.add(amountLP);
-
-            await sleep(H);
-            await mine();
-
-            expect(await pair.balanceOf(alice.address)).to.be.equal(lpTotal.sub(lpLockedTotal).sub(MINIMUM_LIQUIDITY));
-            expect(await delegate.locked(alice.address)).to.be.equal(lpLockedTotal);
-            expect(await delegate.lockedTotal()).to.be.equal(lpLockedTotal);
-
-            const amountToken_alice = await getTokensInLP(amountLP);
-            let amount = amountToken_alice.add(
-                amountToken_alice.mul(MAX_BOOST).mul(circulatingLP).div(lpTotal).div(lpTotal)
-            );
-            if (amount.gt(amountToken_alice.mul(333).div(10))) {
-                amount = amountToken_alice.mul(333).div(10);
-            }
-            amountVE_alice = amountVE_alice.add(amount);
-            log(
-                i,
-                lpTotal,
-                lpLockedTotal,
-                MAX_BOOST.mul(100).mul(circulatingLP).div(lpTotal).div(lpTotal).toNumber() / 100
-            );
-            expectApproxEqual(
-                await totalSupply(),
-                amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - H - i * DAY),
-                TOL
-            );
-            expectApproxEqual(
-                await balanceOf(alice),
-                amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - H - i * DAY),
-                TOL
-            );
-
-            await sleep(DAY - H);
-            await mine();
-        }
-    });
-
-    it("should createLock() and withdraw() with decreasing LP", async () => {
-        const { ve, pair, delegate, alice, totalSupply, balanceOf, mintLPToken, burnLPToken, getTokensInLP } =
+    it("should migrate()", async () => {
+        const { veLegacy, ve, pair, delegateLegacy, delegate, alice, totalSupply, balanceOf, mintLPToken } =
             await setupTest();
 
-        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
+        await pair.connect(alice).approve(delegateLegacy.address, ONE.mul(1000));
 
         expectZero(await totalSupply());
         expectZero(await balanceOf(alice));
+        expectZero(await pair.balanceOf(delegateLegacy.address));
 
-        await mintLPToken(alice, ONE.mul(100));
-        expect(await pair.totalSupply()).to.be.equal(ONE.mul(100));
-        expect(await pair.balanceOf(alice.address)).to.be.equal(ONE.mul(100).sub(MINIMUM_LIQUIDITY));
-
-        for (let i = 0; i < 100; i++) {
-            const lpTotal = await pair.totalSupply();
-            const circulatingLP = lpTotal;
-            const amountLP = ONE.sub(i === 99 ? MINIMUM_LIQUIDITY : 0);
-            const balanceLP_alice = circulatingLP.sub(MINIMUM_LIQUIDITY);
-            expect(lpTotal).to.be.equal(ONE.mul(100).sub(ONE.mul(i)));
-            expect(await pair.balanceOf(alice.address)).to.be.equal(balanceLP_alice);
-
-            // Move to timing which is good for testing - beginning of a UTC week
-            const ts = await getBlockTimestamp();
-            await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
-            await mine();
-
-            await delegate.connect(alice).createLock(amountLP, MAX_DURATION);
-
-            await sleep(H);
-            await mine();
-
-            expect(await pair.balanceOf(alice.address)).to.be.equal(balanceLP_alice.sub(amountLP));
-            expect(await delegate.locked(alice.address)).to.be.equal(amountLP);
-            expect(await delegate.lockedTotal()).to.be.equal(amountLP);
-
-            const amountToken_alice = await getTokensInLP(amountLP);
-            let amountVE_alice = amountToken_alice.add(
-                amountToken_alice.mul(MAX_BOOST).mul(circulatingLP).div(lpTotal.pow(2))
-            );
-            if (amountVE_alice.gt(amountToken_alice.mul(333).div(10))) {
-                amountVE_alice = amountToken_alice.mul(333).div(10);
-            }
-            log(i, lpTotal, amountLP, MAX_BOOST.mul(100).mul(circulatingLP).div(lpTotal).div(lpTotal).toNumber() / 100);
-            expectApproxEqual(await totalSupply(), amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - 2 * H), TOL);
-            expectApproxEqual(await balanceOf(alice), amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - H), TOL);
-
-            await sleep(MAX_DURATION);
-            await mine();
-
-            expectZero(await balanceOf(alice));
-            await ve.connect(alice).withdraw();
-
-            expectZero(await totalSupply());
-            expectZero(await balanceOf(alice));
-
-            await burnLPToken(alice, amountLP);
-        }
-    });
-
-    it("should createLock() and increaseAmount() with increasing LP", async () => {
-        const { pair, delegate, alice, totalSupply, balanceOf, mintLPToken, getTokensInLP } = await setupTest();
-
-        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
-
-        expectZero(await totalSupply());
-        expectZero(await balanceOf(alice));
+        await mintLPToken(alice, ONE);
+        const lpTotal = await pair.totalSupply();
+        const amountLP = ONE.sub(MINIMUM_LIQUIDITY);
+        expect(lpTotal).to.be.equal(ONE);
+        expect(await pair.balanceOf(alice.address)).to.be.equal(amountLP);
+        expectZero(await pair.balanceOf(delegateLegacy.address));
 
         // Move to timing which is good for testing - beginning of a UTC week
         const ts = await getBlockTimestamp();
-        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
+        await sleep((divf(ts, INTERVAL_LEGACY) + 1) * INTERVAL_LEGACY - ts);
         await mine();
 
-        let lpLockedTotal = constants.Zero;
-        let amountVE_alice = constants.Zero;
-        for (let i = 0; i < 100; i++) {
-            await mintLPToken(alice, ONE);
-            const lpTotal = await pair.totalSupply();
-            const circulatingLP = lpTotal.sub(lpLockedTotal);
-            const amountLP = ONE.sub(i === 0 ? MINIMUM_LIQUIDITY : 0);
-            expect(lpTotal).to.be.equal(ONE.mul(i + 1));
-            expect(await pair.balanceOf(alice.address)).to.be.equal(amountLP);
+        await delegateLegacy.connect(alice).createLock(amountLP, INTERVAL_LEGACY * 3);
+        expectZero(await pair.balanceOf(alice.address));
+        expect(await pair.balanceOf(delegateLegacy.address)).to.be.equal(amountLP);
 
-            await sleep(H);
-            await mine();
+        const balanceVE = await veLegacy["balanceOf(address)"](alice.address);
+        const {
+            amount: amountLegacy,
+            discount: discountLegacy,
+            start: startLegacy,
+            end: endLegacy,
+        } = await veLegacy.locked(alice.address);
 
-            if (i === 0) {
-                await delegate.connect(alice).createLock(amountLP, MAX_DURATION);
-            } else {
-                await delegate.connect(alice).increaseAmount(amountLP);
-            }
-            lpLockedTotal = lpLockedTotal.add(amountLP);
-
-            await sleep(H);
-            await mine();
-
-            expectZero(await pair.balanceOf(alice.address));
-            expect(await delegate.locked(alice.address)).to.be.equal(lpLockedTotal);
-            expect(await delegate.lockedTotal()).to.be.equal(lpLockedTotal);
-
-            const amountToken_alice = await getTokensInLP(amountLP);
-            let amount = amountToken_alice.add(
-                amountToken_alice.mul(MAX_BOOST).mul(circulatingLP).div(lpTotal).div(lpTotal)
-            );
-            if (amount.gt(amountToken_alice.mul(333).div(10))) {
-                amount = amountToken_alice.mul(333).div(10);
-            }
-            amountVE_alice = amountVE_alice.add(amount);
-            log(
-                i,
-                lpTotal,
-                lpLockedTotal,
-                MAX_BOOST.mul(100).mul(circulatingLP).div(lpTotal).div(lpTotal).toNumber() / 100
-            );
-            expectApproxEqual(
-                await totalSupply(),
-                amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - 2 * H - i * DAY),
-                TOL
-            );
-            expectApproxEqual(
-                await balanceOf(alice),
-                amountVE_alice.div(MAX_DURATION).mul(MAX_DURATION - 2 * H - i * DAY),
-                TOL
-            );
-
-            await sleep(DAY - 2 * H);
-            await mine();
-        }
-    });
-
-    it("should cancel()", async () => {
-        const { ve, pair, delegate, migrator, alice, totalSupply, balanceOf, mintLPToken } = await setupTest();
-
-        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
-
-        expectZero(await totalSupply());
-        expectZero(await balanceOf(alice));
-
-        await mintLPToken(alice, ONE.mul(1000));
-        const amountLP = ONE;
-
-        // Move to timing which is good for testing - beginning of a UTC week
-        let ts = await getBlockTimestamp();
-        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
-        await mine();
-
-        const unlockTime = Math.floor(((await getBlockTimestamp()) + INTERVAL) / INTERVAL) * INTERVAL;
-        await delegate.connect(alice).createLock(amountLP, INTERVAL);
-
-        let balance = await pair.balanceOf(alice.address);
-        await sleep(DAY);
-
-        const duration = unlockTime - (await getBlockTimestamp());
-        await ve.connect(alice).cancel();
-
-        let penaltyRate = PENALTY_BASE.mul(unlockTime - (await getBlockTimestamp())).div(duration);
-        if (penaltyRate.lt(PENALTY_BASE.div(2))) penaltyRate = PENALTY_BASE.div(2);
-        expect((await pair.balanceOf(alice.address)).sub(balance)).to.be.equal(
-            amountLP.mul(PENALTY_BASE.sub(penaltyRate)).div(PENALTY_BASE)
+        await expect(delegate.connect(alice).migrate(alice.address, 0, 0, 0, 0, [])).to.be.revertedWith(
+            "LPVED: FORBIDDEN"
         );
-        expectZero(await ve.unlockTime(alice.address));
+        await expect(veLegacy.connect(alice).migrate()).to.be.revertedWith("LPVED: PRE_MIGRATE_FIRST");
+        await delegate.connect(alice).preMigrate();
 
-        // Move to timing which is good for testing - beginning of a UTC week
-        ts = await getBlockTimestamp();
-        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
-        await mine();
+        await expect(veLegacy.connect(alice).migrate()).to.be.revertedWith("ds-math-sub-underflow");
+        await pair.connect(alice).approve(delegate.address, amountLP);
+        await veLegacy.connect(alice).migrate();
 
-        await delegate.connect(alice).createLock(amountLP, INTERVAL);
+        expectZero(await veLegacy.unlockTime(alice.address));
+        expectZero(await veLegacy["balanceOf(address)"](alice.address));
+        expectZero(await pair.balanceOf(delegateLegacy.address));
 
-        await sleep(DAY);
-        await delegate.connect(alice).increaseAmount(amountLP);
+        const { amount, discount, start, end } = await ve.locked(alice.address);
+        expect(amount).to.be.equal(amountLegacy);
+        expect(discount).to.be.equal(discountLegacy);
 
-        balance = await pair.balanceOf(alice.address);
-        await sleep(DAY);
+        const newStart = startLegacy.add(INTERVAL).div(INTERVAL).mul(INTERVAL);
+        let newEnd = endLegacy.div(INTERVAL).mul(INTERVAL);
+        if (newStart.gte(newEnd)) newEnd = newEnd.add(INTERVAL);
+        expect(start).to.be.equal(newStart);
+        expect(end).to.be.equal(newEnd);
+        expectApproxEqual((await ve["balanceOf(address)"](alice.address)).mul(2), balanceVE, ONE);
+        expect(await pair.balanceOf(delegate.address)).to.be.equal(amountLP);
 
-        await ve.connect(alice).cancel();
+        await sleep(INTERVAL_LEGACY * 3);
+        expectZero(await pair.balanceOf(alice.address));
 
-        expect((await pair.balanceOf(alice.address)).sub(balance)).to.be.equal(amountLP); // Half of the total amount
-        expectZero(await ve.unlockTime(alice.address));
+        await veLegacy.connect(alice).withdraw();
+        expectZero(await pair.balanceOf(alice.address));
 
-        await ve.setMigrator(migrator.address);
-        await expect(ve.connect(alice).migrate()).to.be.revertedWith("VE: LOCK_NOT_FOUND");
-
-        // Move to timing which is good for testing - beginning of a UTC week
-        ts = await getBlockTimestamp();
-        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
-        await mine();
-
-        await delegate.connect(alice).createLock(amountLP, INTERVAL);
-
-        await sleep(INTERVAL);
-        await expect(ve.connect(alice).cancel()).to.be.revertedWith("VE: LOCK_EXPIRED");
         await ve.connect(alice).withdraw();
-    });
-
-    it("should withdraw()", async () => {
-        const { ve, pair, migrator, delegate, alice, totalSupply, balanceOf, mintLPToken } = await setupTest();
-
-        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
-
-        expectZero(await totalSupply());
-        expectZero(await balanceOf(alice));
-
-        await mintLPToken(alice, ONE);
-        const lpTotal = await pair.totalSupply();
-        const amountLP = ONE.sub(MINIMUM_LIQUIDITY);
-        expect(lpTotal).to.be.equal(ONE);
         expect(await pair.balanceOf(alice.address)).to.be.equal(amountLP);
-
-        // Move to timing which is good for testing - beginning of a UTC week
-        const ts = await getBlockTimestamp();
-        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
-        await mine();
-
-        await delegate.connect(alice).createLock(amountLP, INTERVAL);
-
-        await sleep(INTERVAL);
-        await ve.connect(alice).withdraw();
-
-        await expect(ve.connect(alice).cancel()).to.be.revertedWith("VE: LOCK_NOT_FOUND");
-
-        await ve.setMigrator(migrator.address);
-        await expect(ve.connect(alice).migrate()).to.be.revertedWith("VE: LOCK_NOT_FOUND");
-    });
-
-    it("should migrate()", async () => {
-        const { ve, pair, migrator, delegate, alice, totalSupply, balanceOf, mintLPToken } = await setupTest();
-
-        await pair.connect(alice).approve(delegate.address, ONE.mul(1000));
-
-        expectZero(await totalSupply());
-        expectZero(await balanceOf(alice));
-
-        await mintLPToken(alice, ONE);
-        const lpTotal = await pair.totalSupply();
-        const amountLP = ONE.sub(MINIMUM_LIQUIDITY);
-        expect(lpTotal).to.be.equal(ONE);
-        expect(await pair.balanceOf(alice.address)).to.be.equal(amountLP);
-
-        // Move to timing which is good for testing - beginning of a UTC week
-        const ts = await getBlockTimestamp();
-        await sleep((divf(ts, INTERVAL) + 1) * INTERVAL - ts);
-        await mine();
-
-        await delegate.connect(alice).createLock(amountLP, INTERVAL);
-
-        await ve.setMigrator(migrator.address);
-        await ve.connect(alice).migrate();
-
-        expectZero(await ve.unlockTime(alice.address));
-        await expect(ve.connect(alice).cancel()).to.be.revertedWith("VE: LOCK_NOT_FOUND");
-
-        await sleep(INTERVAL);
-        await ve.connect(alice).withdraw();
-
-        await expect(delegate.connect(alice).createLock(amountLP, INTERVAL)).to.be.revertedWith("VE: LOCK_MIGRATED");
     });
 });
-
-const log = (i, lpTotal, lpLocked, boost) => {
-    if (!LOG_OFF) {
-        console.log(
-            i +
-                "\t" +
-                Number(utils.formatEther(lpLocked)).toFixed(18) +
-                "\t" +
-                Number(utils.formatEther(lpTotal)).toFixed(18) +
-                "\t" +
-                boost.toFixed(2).toString().padStart(7, " ") +
-                "x"
-        );
-    }
-};
