@@ -5,7 +5,8 @@ interface INFTGaugeFactory {
     event UpgradeTarget(address target, uint256 indexed version);
     event CreateNFTGauge(address indexed nftContract, address indexed gauge);
     event UpdateCurrencyWhitelisted(address indexed token, bool whitelisted);
-    event UpdateFeeRatio(uint256 feeRatio);
+    event UpdateFeeRatio(uint256 ratio);
+    event UpdateOwnerAdvantageRatio(uint256 ratio);
     event DistributeFees(address indexed token, uint256 indexed id, uint256 amount);
     event ClaimFees(address indexed token, uint256 amount, address indexed to);
 
@@ -18,6 +19,8 @@ interface INFTGaugeFactory {
     function discountToken() external view returns (address);
 
     function feeRatio() external view returns (uint256);
+
+    function ownerAdvantageRatio() external view returns (uint256);
 
     function currencyWhitelisted(address currency) external view returns (bool);
 
@@ -35,7 +38,9 @@ interface INFTGaugeFactory {
 
     function updateCurrencyWhitelisted(address token, bool whitelisted) external;
 
-    function updateFeeRatio(uint256 feeRatio) external;
+    function updateFeeRatio(uint256 ratio) external;
+
+    function updateOwnerAdvantageRatio(uint256 ratio) external;
 
     function createNFTGauge(address nftContract) external returns (address gauge);
 

@@ -203,9 +203,11 @@ contract NFTGauge is WrappedERC721, INFTGauge {
                 }
 
                 // time-weighted bias-sum divided time gives us the average bias of the user for dt
+                uint256 bias = timeWeightedBiasSum * dIntegrate;
+                uint256 r = INFTGaugeFactory(factory).ownerAdvantageRatio();
                 uint256 dt = block.timestamp - ts;
-                integrateFraction[tokenId][user] += (timeWeightedBiasSum * dIntegrate * 2) / dt / 3 / 1e18; // 67% goes to voters
-                integrateFraction[tokenId][ownerOf(tokenId)] += (timeWeightedBiasSum * dIntegrate) / dt / 3 / 1e18; // 33% goes to the owner
+                integrateFraction[tokenId][user] += (bias * (10000 - r)) / dt / 10000 / 1e18; // for voters
+                integrateFraction[tokenId][ownerOf(tokenId)] += (bias * r) / dt / 10000 / 1e18; // for the owner
             }
         }
         periodOf[tokenId][user] = _period;

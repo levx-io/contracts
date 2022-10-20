@@ -28,6 +28,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     address public _target;
 
     uint256 public override feeRatio;
+    uint256 public override ownerAdvantageRatio;
     mapping(address => bool) public override currencyWhitelisted;
     mapping(address => address) public override gauges;
     mapping(address => bool) public override isGauge;
@@ -39,18 +40,23 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         address _weth,
         address _minter,
         address _discountToken,
-        uint256 _feeRatio
+        uint256 _feeRatio,
+        uint256 _ownerAdvantageRatio
     ) {
         weth = _weth;
         minter = _minter;
         address _controller = IMinter(_minter).controller();
         votingEscrow = IGaugeController(_controller).votingEscrow();
         discountToken = _discountToken;
-        updateFeeRatio(_feeRatio);
+        feeRatio = _feeRatio;
+        ownerAdvantageRatio = _ownerAdvantageRatio;
 
         NFTGauge gauge = new NFTGauge();
         gauge.initialize(_controller, address(0));
         _target = address(gauge);
+
+        emit UpdateFeeRatio(_feeRatio);
+        emit UpdateOwnerAdvantageRatio(_ownerAdvantageRatio);
     }
 
     receive() external payable {
@@ -75,12 +81,20 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         emit UpdateCurrencyWhitelisted(token, whitelisted);
     }
 
-    function updateFeeRatio(uint256 _feeRatio) public override onlyOwner {
-        require(_feeRatio < 10000, "NFTGF: INVALID_FEE_RATIO");
+    function updateFeeRatio(uint256 ratio) public override onlyOwner {
+        require(ratio < 10000, "NFTGF: INVALID_FEE_RATIO");
 
-        feeRatio = _feeRatio;
+        feeRatio = ratio;
 
-        emit UpdateFeeRatio(_feeRatio);
+        emit UpdateFeeRatio(ratio);
+    }
+
+    function updateOwnerAdvantageRatio(uint256 ratio) public override onlyOwner {
+        require(ratio < 10000, "NFTGF: INVALID_FEE_RATIO");
+
+        ownerAdvantageRatio = ratio;
+
+        emit UpdateOwnerAdvantageRatio(ratio);
     }
 
     function createNFTGauge(address nftContract) external override returns (address gauge) {
