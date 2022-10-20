@@ -4,7 +4,6 @@ pragma solidity ^0.8.0;
 interface IGaugeController {
     event AddType(string name, int128 gaugeType);
     event NewTypeWeight(int128 gaugeType, uint256 time, uint256 weight, uint256 totalWeight);
-    event NewGaugeWeight(address addr, uint256 time, uint256 weight, uint256 totalWeight);
     event VoteForGauge(uint256 time, address user, address addr, uint256 weight);
     event NewGauge(address addr, int128 gaugeType, uint256 weight);
 
@@ -76,8 +75,6 @@ interface IGaugeController {
         int128 gaugeType,
         uint256 weight
     ) external;
-
-    function increaseGaugeWeight(uint256 weight) external;
 
     function checkpoint() external;
 

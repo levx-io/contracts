@@ -28,7 +28,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     address public _target;
 
     uint256 public override feeRatio;
-    mapping(address => address) public override currencyConverter;
+    mapping(address => bool) public override currencyWhitelisted;
     mapping(address => address) public override gauges;
     mapping(address => bool) public override isGauge;
 
@@ -69,10 +69,10 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         NFTGauge(addr).killMe();
     }
 
-    function updateCurrencyConverter(address token, address converter) external override onlyOwner {
-        currencyConverter[token] = converter;
+    function updateCurrencyWhitelisted(address token, bool whitelisted) external override onlyOwner {
+        currencyWhitelisted[token] = whitelisted;
 
-        emit UpdateCurrencyConverter(token, converter);
+        emit UpdateCurrencyWhitelisted(token, whitelisted);
     }
 
     function updateFeeRatio(uint256 _feeRatio) public override onlyOwner {
@@ -101,7 +101,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         uint256 amount
     ) external override {
         require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
-        require(currencyConverter[currency] != address(0), "NFTGF: INVALID_TOKEN");
+        require(currencyWhitelisted[currency], "NFTGF: INVALID_TOKEN");
 
         IERC20(currency).safeTransferFrom(from, msg.sender, amount);
     }

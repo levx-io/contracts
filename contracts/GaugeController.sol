@@ -236,14 +236,6 @@ contract GaugeController is Ownable, IGaugeController {
     }
 
     /**
-     * @notice Change weight of gauge `addr` to `weight`
-     * @param increment Gauge weight to be increased
-     */
-    function increaseGaugeWeight(uint256 increment) external override {
-        _increaseGaugeWeight(increment);
-    }
-
-    /**
      * @notice Checkpoint to fill data common for all gauges
      */
     function checkpoint() external override {
@@ -386,35 +378,6 @@ contract GaugeController is Ownable, IGaugeController {
         timeTypeWeight[gaugeType] = nextTime;
 
         emit NewTypeWeight(gaugeType, nextTime, weight, totalWeight);
-    }
-
-    /**
-     * @notice Change weight of gauge `addr` to `weight`
-     * @param increment Gauge weight to be increased
-     */
-    function _increaseGaugeWeight(uint256 increment) internal {
-        int128 gaugeType = _gaugeTypes[msg.sender] - 1;
-        require(gaugeType >= 0, "GC: GAUGE_NOT_ADDED");
-
-        uint256 oldGaugeWeight = _getWeight(msg.sender);
-        uint256 typeWeight = _getTypeWeight(gaugeType);
-        uint256 oldSum = _getSum(gaugeType);
-        uint256 totalWeight = _getTotal();
-        uint256 _interval = interval;
-        uint256 nextTime = ((block.timestamp + _interval) / _interval) * _interval;
-
-        pointsWeight[msg.sender][nextTime].bias = oldGaugeWeight + increment;
-        timeWeight[msg.sender] = nextTime;
-
-        uint256 newSum = oldSum + increment;
-        pointsSum[gaugeType][nextTime].bias = newSum;
-        timeSum[gaugeType] = nextTime;
-
-        totalWeight += increment * typeWeight;
-        pointsTotal[nextTime] = totalWeight;
-        timeTotal = nextTime;
-
-        emit NewGaugeWeight(msg.sender, block.timestamp, oldGaugeWeight + increment, totalWeight);
     }
 
     /**

@@ -3,8 +3,8 @@ pragma solidity ^0.8.0;
 
 interface INFTGaugeFactory {
     event UpgradeTarget(address target, uint256 indexed version);
-    event UpdateCurrencyConverter(address indexed token, address indexed converter);
     event CreateNFTGauge(address indexed nftContract, address indexed gauge);
+    event UpdateCurrencyWhitelisted(address indexed token, bool whitelisted);
     event UpdateFeeRatio(uint256 feeRatio);
     event DistributeFees(address indexed token, uint256 indexed id, uint256 amount);
     event ClaimFees(address indexed token, uint256 amount, address indexed to);
@@ -19,7 +19,7 @@ interface INFTGaugeFactory {
 
     function feeRatio() external view returns (uint256);
 
-    function currencyConverter(address currency) external view returns (address);
+    function currencyWhitelisted(address currency) external view returns (bool);
 
     function gauges(address nftContract) external view returns (address);
 
@@ -33,7 +33,7 @@ interface INFTGaugeFactory {
 
     function killGauge(address addr) external;
 
-    function updateCurrencyConverter(address token, address converter) external;
+    function updateCurrencyWhitelisted(address token, bool whitelisted) external;
 
     function updateFeeRatio(uint256 feeRatio) external;
 
