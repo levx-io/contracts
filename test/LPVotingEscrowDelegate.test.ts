@@ -138,7 +138,7 @@ const setupTest = async () => {
     };
 };
 
-describe.only("LPVotingEscrowDelegate", () => {
+describe("LPVotingEscrowDelegate", () => {
     beforeEach(async () => {
         await ethers.provider.send("hardhat_reset", []);
     });
@@ -203,7 +203,7 @@ describe.only("LPVotingEscrowDelegate", () => {
         expectApproxEqual((await ve["balanceOf(address)"](alice.address)).mul(2), balanceVE, ONE);
         expect(await pair.balanceOf(delegate.address)).to.be.equal(amountLP);
 
-        await sleep(INTERVAL_LEGACY * 3);
+        await sleep(INTERVAL_LEGACY * 10);
         expectZero(await pair.balanceOf(alice.address));
 
         await veLegacy.connect(alice).withdraw();
