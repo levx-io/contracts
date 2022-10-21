@@ -4,14 +4,14 @@ pragma solidity ^0.8.15;
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
-import "../base/ERC721Initializable.sol";
+import "../base/ERC721NonTransferable.sol";
 import "../interfaces/IWrappedERC721.sol";
 import "../interfaces/INFTGaugeFactory.sol";
 import "../libraries/Tokens.sol";
 import "../libraries/Math.sol";
 import "../libraries/Errors.sol";
 
-abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappedERC721 {
+abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrappedERC721 {
     using Strings for uint256;
 
     struct Order {
@@ -43,12 +43,12 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         _weth = INFTGaugeFactory(msg.sender).weth();
         string memory name;
         string memory symbol;
-        try IERC721Metadata(_nftContract).name() returns (string memory _name) {
+        try IERC721NonTransferable(_nftContract).name() returns (string memory _name) {
             name = _name;
         } catch {
             name = uint256(uint160(nftContract)).toHexString(20);
         }
-        try IERC721Metadata(_nftContract).symbol() returns (string memory _symbol) {
+        try IERC721NonTransferable(_nftContract).symbol() returns (string memory _symbol) {
             symbol = string(abi.encodePacked("W", _symbol));
         } catch {
             symbol = "WNFT";
@@ -59,12 +59,12 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
     function tokenURI(uint256 tokenId)
         public
         view
-        override(ERC721Initializable, IERC721Metadata)
+        override(ERC721NonTransferable, IERC721NonTransferable)
         returns (string memory output)
     {
         revertIfNonExistent(_exists(tokenId));
 
-        return IERC721Metadata(nftContract).tokenURI(tokenId);
+        return IERC721NonTransferable(nftContract).tokenURI(tokenId);
     }
 
     function listForSale(
@@ -244,7 +244,7 @@ abstract contract WrappedERC721 is ERC721Initializable, ReentrancyGuard, IWrappe
         revertIfExpired(block.timestamp <= offer.deadline);
 
         delete offers[tokenId][maker];
-        _safeTransfer(msg.sender, maker, tokenId, "0x");
+        _transfer(msg.sender, maker, tokenId);
 
         _settle(tokenId, offer.currency, msg.sender, offer.price);
 
