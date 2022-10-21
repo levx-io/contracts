@@ -2,6 +2,7 @@
 pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import "@openzeppelin/contracts/interfaces/IERC2981.sol";
 import "./base/WrappedERC721.sol";
 import "./interfaces/INFTGauge.sol";
 import "./interfaces/IGaugeController.sol";
@@ -66,6 +67,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     uint256 internal _inflationRate;
     uint256 internal _interval;
     uint256 internal _weightVoteDelay;
+    bool internal _supportsERC2981;
 
     function initialize(address _nftContract, address _minter) external override initializer {
         __WrappedERC721_init(_nftContract);
@@ -79,6 +81,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         _futureEpochTime = IMinter(_minter).futureEpochTimeWrite();
         _interval = IGaugeController(_controller).interval();
         _weightVoteDelay = IGaugeController(_controller).weightVoteDelay();
+
+        try IERC165(_nftContract).supportsInterface(0x2a55205a) returns (bool success) {
+            _supportsERC2981 = success;
+        } catch {}
     }
 
     function integrateCheckpoint() external view override returns (uint256) {
@@ -433,9 +439,18 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         address to,
         uint256 amount
     ) internal override {
+        address weth = _weth;
+        uint256 royalty;
+        if (_supportsERC2981) {
+            try IERC2981(nftContract).royaltyInfo(tokenId, amount) returns (address receiver, uint256 _royalty) {
+                royalty = _royalty;
+                Tokens.safeTransfer(currency, receiver, _royalty, weth);
+            } catch {}
+        }
+
         address _factory = factory;
-        uint256 fee = INFTGaugeFactory(_factory).distributeFees(currency, amount);
-        Tokens.safeTransfer(currency, _factory, fee, _weth);
+        uint256 fee = INFTGaugeFactory(_factory).distributeFees(currency, amount - royalty);
+        Tokens.safeTransfer(currency, _factory, fee, weth);
 
         uint256 dividend;
         uint256 length = _wraps[tokenId].length;
@@ -445,12 +460,12 @@ contract NFTGauge is WrappedERC721, INFTGauge {
             uint256 time = (block.timestamp / interval) * interval;
             uint256 sum = pointsSum[tokenId][time].bias;
             if (sum > 0) {
-                dividend = ((amount - fee) * _wraps[tokenId][length - 1].dividendRatio) / 10000;
+                dividend = ((amount - royalty - fee) * _wraps[tokenId][length - 1].dividendRatio) / 10000;
                 _dividends[currency][tokenId].push(Dividend(uint64(time), uint192((dividend * 1e18) / sum)));
                 emit DistributeDividend(currency, tokenId, dividend);
             }
         }
-        Tokens.safeTransfer(currency, to, amount - fee - dividend, _weth);
+        Tokens.safeTransfer(currency, to, amount - royalty - fee - dividend, weth);
     }
 
     function _beforeTokenTransfer(
