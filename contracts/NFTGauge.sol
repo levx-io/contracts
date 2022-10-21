@@ -7,7 +7,6 @@ import "./interfaces/INFTGauge.sol";
 import "./interfaces/IGaugeController.sol";
 import "./interfaces/IMinter.sol";
 import "./interfaces/IVotingEscrow.sol";
-import "./interfaces/ICurrencyConverter.sol";
 import "./libraries/Tokens.sol";
 import "./libraries/Math.sol";
 import "./libraries/NFTs.sol";

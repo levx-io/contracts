@@ -4,6 +4,35 @@ pragma solidity ^0.8.0;
 import "./IERC721NonTransferable.sol";
 
 interface IWrappedERC721 is IERC721NonTransferable {
+    event ListForSale(
+        uint256 indexed tokenId,
+        address indexed owner,
+        uint256 price,
+        address currency,
+        uint64 deadline,
+        bool indexed auction
+    );
+    event CancelListing(uint256 indexed tokenId, address indexed owner);
+    event MakeOffer(uint256 indexed tokenId, address indexed maker, uint256 price, address currency, uint256 deadline);
+    event WithdrawOffer(uint256 indexed tokenId, address indexed maker);
+    event AcceptOffer(
+        uint256 indexed tokenId,
+        address indexed maker,
+        address indexed taker,
+        uint256 price,
+        address currency,
+        uint256 deadline
+    );
+    event Buy(uint256 indexed tokenId, address indexed owner, address indexed bidder, uint256 price, address currency);
+    event Bid(uint256 indexed tokenId, address indexed owner, address indexed bidder, uint256 price, address currency);
+    event Claim(
+        uint256 indexed tokenId,
+        address indexed owner,
+        address indexed bidder,
+        uint256 price,
+        address currency
+    );
+
     function nftContract() external view returns (address);
 
     function factory() external view returns (address);
@@ -77,33 +106,4 @@ interface IWrappedERC721 is IERC721NonTransferable {
     function withdrawOffer(uint256 tokenId) external;
 
     function acceptOffer(uint256 tokenId, address maker) external;
-
-    event ListForSale(
-        uint256 indexed tokenId,
-        address indexed owner,
-        uint256 price,
-        address currency,
-        uint64 deadline,
-        bool indexed auction
-    );
-    event CancelListing(uint256 indexed tokenId, address indexed owner);
-    event MakeOffer(uint256 indexed tokenId, address indexed maker, uint256 price, address currency, uint256 deadline);
-    event WithdrawOffer(uint256 indexed tokenId, address indexed maker);
-    event AcceptOffer(
-        uint256 indexed tokenId,
-        address indexed maker,
-        address indexed taker,
-        uint256 price,
-        address currency,
-        uint256 deadline
-    );
-    event Buy(uint256 indexed tokenId, address indexed owner, address indexed bidder, uint256 price, address currency);
-    event Bid(uint256 indexed tokenId, address indexed owner, address indexed bidder, uint256 price, address currency);
-    event Claim(
-        uint256 indexed tokenId,
-        address indexed owner,
-        address indexed bidder,
-        uint256 price,
-        address currency
-    );
 }
