@@ -44,6 +44,24 @@ contract FeeVault is IFeeVault {
         return fees[token].length;
     }
 
+    function claimableFees(address token, uint256 to) public view override returns (uint256 amount) {
+        uint256 from = lastFeeClaimed[token][msg.sender];
+
+        (int128 value, , uint256 start, ) = IVotingEscrow(votingEscrow).locked(msg.sender);
+        require(value > 0, "FV: LOCK_NOT_FOUND");
+
+        for (uint256 i = from; i < to; ) {
+            Fee memory fee = fees[token][i];
+            if (start < fee.timestamp) {
+                uint256 balance = IVotingEscrow(votingEscrow).balanceOf(msg.sender, fee.timestamp);
+                if (balance > 0) amount += (balance * fee.amountPerShare) / 1e18;
+            }
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
     /**
      * @notice Checkpoint increased amount of `token`
      * @param token In which currency fees were paid
@@ -82,22 +100,7 @@ contract FeeVault is IFeeVault {
         require(path[0] == (token == address(0) ? weth : token), "FV: INVALID_PATH");
         require(path[path.length - 1] == rewardToken, "FV: INVALID_PATH");
 
-        uint256 from = lastFeeClaimed[token][msg.sender];
-
-        (int128 value, , uint256 start, ) = IVotingEscrow(votingEscrow).locked(msg.sender);
-        require(value > 0, "FV: LOCK_NOT_FOUND");
-
-        uint256 amount;
-        for (uint256 i = from; i < to; ) {
-            Fee memory fee = fees[token][i];
-            if (start < fee.timestamp) {
-                uint256 balance = IVotingEscrow(votingEscrow).balanceOf(msg.sender, fee.timestamp);
-                if (balance > 0) amount += (balance * fee.amountPerShare) / 1e18;
-            }
-            unchecked {
-                ++i;
-            }
-        }
+        uint256 amount = claimableFees(token, to);
         lastFeeClaimed[token][msg.sender] = to;
 
         if (amount > 0) {

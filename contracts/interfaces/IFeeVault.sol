@@ -21,6 +21,8 @@ interface IFeeVault {
 
     function feesLength(address token) external view returns (uint256);
 
+    function claimableFees(address token, uint256 to) external view returns (uint256 amount);
+
     function checkpoint(address token) external;
 
     function claimFees(
