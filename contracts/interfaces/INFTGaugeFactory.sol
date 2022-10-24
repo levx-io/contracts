@@ -7,8 +7,6 @@ interface INFTGaugeFactory {
     event UpdateCurrencyWhitelisted(address indexed token, bool whitelisted);
     event UpdateFeeRatio(uint256 ratio);
     event UpdateOwnerAdvantageRatio(uint256 ratio);
-    event DistributeFees(address indexed token, uint256 indexed id, uint256 amount);
-    event ClaimFees(address indexed token, uint256 amount, address indexed to);
 
     function weth() external view returns (address);
 
@@ -17,6 +15,8 @@ interface INFTGaugeFactory {
     function votingEscrow() external view returns (address);
 
     function discountToken() external view returns (address);
+
+    function feeVault() external view returns (address);
 
     function feeRatio() external view returns (uint256);
 
@@ -28,11 +28,7 @@ interface INFTGaugeFactory {
 
     function isGauge(address addr) external view returns (bool);
 
-    function fees(address token, uint256 id) external view returns (uint64 timestamp, uint192 amountPerShare);
-
-    function lastFeeClaimed(address token, address user) external view returns (uint256);
-
-    function feesLength(address token) external view returns (uint256);
+    function calculateFee(address token, uint256 amount) external view returns (uint256);
 
     function killGauge(address addr) external;
 
@@ -49,8 +45,4 @@ interface INFTGaugeFactory {
         address from,
         uint256 amount
     ) external;
-
-    function distributeFees(address token, uint256 amount) external returns (uint256 amountFee);
-
-    function claimFees(address token, uint256 to) external;
 }

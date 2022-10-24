@@ -8,6 +8,7 @@ import "./interfaces/INFTGauge.sol";
 import "./interfaces/IGaugeController.sol";
 import "./interfaces/IMinter.sol";
 import "./interfaces/IVotingEscrow.sol";
+import "./interfaces/IFeeVault.sol";
 import "./libraries/Tokens.sol";
 import "./libraries/Math.sol";
 import "./libraries/NFTs.sol";
@@ -449,8 +450,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         }
 
         address _factory = factory;
-        uint256 fee = INFTGaugeFactory(_factory).distributeFees(currency, amount - royalty);
-        Tokens.safeTransfer(currency, _factory, fee, weth);
+        address vault = INFTGaugeFactory(_factory).feeVault();
+        uint256 fee = INFTGaugeFactory(_factory).calculateFee(currency, amount - royalty);
+        Tokens.safeTransfer(currency, vault, fee, weth);
+        IFeeVault(vault).checkpoint(currency);
 
         uint256 dividend;
         uint256 length = _wraps[tokenId].length;

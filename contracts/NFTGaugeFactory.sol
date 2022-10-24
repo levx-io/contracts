@@ -6,24 +6,16 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./base/CloneFactory.sol";
 import "./interfaces/INFTGaugeFactory.sol";
 import "./libraries/Integers.sol";
-import "./libraries/Tokens.sol";
-import "./libraries/VotingEscrowHelper.sol";
 import "./NFTGauge.sol";
 
 contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     using SafeERC20 for IERC20;
-    using Integers for int128;
-    using Integers for uint256;
-
-    struct Fee {
-        uint64 timestamp;
-        uint192 amountPerShare;
-    }
 
     address public immutable override weth;
     address public immutable override minter;
     address public immutable override votingEscrow;
     address public immutable override discountToken;
+    address public immutable override feeVault;
 
     address public _target;
 
@@ -33,13 +25,11 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     mapping(address => address) public override gauges;
     mapping(address => bool) public override isGauge;
 
-    mapping(address => Fee[]) public override fees;
-    mapping(address => mapping(address => uint256)) public override lastFeeClaimed;
-
     constructor(
         address _weth,
         address _minter,
         address _discountToken,
+        address _feeVault,
         uint256 _feeRatio,
         uint256 _ownerAdvantageRatio
     ) {
@@ -48,6 +38,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         address _controller = IMinter(_minter).controller();
         votingEscrow = IGaugeController(_controller).votingEscrow();
         discountToken = _discountToken;
+        feeVault = _feeVault;
         feeRatio = _feeRatio;
         ownerAdvantageRatio = _ownerAdvantageRatio;
 
@@ -63,8 +54,11 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         // Empty
     }
 
-    function feesLength(address token) external view override returns (uint256) {
-        return fees[token].length;
+    function calculateFee(address token, uint256 amount) external view returns (uint256 fee) {
+        fee = (amount * feeRatio) / 10000;
+        if (token == discountToken) {
+            fee /= 2;
+        }
     }
 
     /**
@@ -118,53 +112,5 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         require(currencyWhitelisted[currency], "NFTGF: INVALID_TOKEN");
 
         IERC20(currency).safeTransferFrom(from, msg.sender, amount);
-    }
-
-    function distributeFees(address token, uint256 amount) external override returns (uint256 amountFee) {
-        require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
-
-        amountFee = (amount * feeRatio) / 10000;
-        if (token == discountToken) {
-            amountFee /= 2;
-        }
-
-        address escrow = votingEscrow;
-        IVotingEscrow(escrow).checkpoint();
-        fees[token].push(
-            Fee(uint64(block.timestamp), ((amount * 1e18) / IVotingEscrow(escrow).totalSupply()).toUint192())
-        );
-
-        emit DistributeFees(token, fees[token].length - 1, amount);
-    }
-
-    /**
-     * @notice Claim accumulated fees
-     * @param token In which currency fees were paid
-     * @param to the last index of the fee (exclusive)
-     */
-    function claimFees(address token, uint256 to) external override {
-        require(to < fees[token].length, "NFTGF: INDEX_OUT_OF_RANGE");
-
-        uint256 from = lastFeeClaimed[token][msg.sender];
-
-        address escrow = votingEscrow;
-        (int128 value, , uint256 start, ) = IVotingEscrow(escrow).locked(msg.sender);
-        require(value > 0, "NFTGF: LOCK_NOT_FOUND");
-
-        uint256 amount;
-        for (uint256 i = from; i < to; ) {
-            Fee memory fee = fees[token][i];
-            if (start < fee.timestamp) {
-                uint256 balance = VotingEscrowHelper.balanceOf(escrow, msg.sender, fee.timestamp);
-                if (balance > 0) amount += (balance * fee.amountPerShare) / 1e18;
-            }
-            unchecked {
-                ++i;
-            }
-        }
-        lastFeeClaimed[token][msg.sender] = to;
-
-        emit ClaimFees(token, amount, msg.sender);
-        Tokens.safeTransfer(token, msg.sender, amount, weth);
     }
 }

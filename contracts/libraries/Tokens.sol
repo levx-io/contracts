@@ -7,6 +7,14 @@ import "../interfaces/IWETH.sol";
 library Tokens {
     using SafeERC20 for IERC20;
 
+    function balanceOf(address token, address account) internal view returns (uint256) {
+        if (token == address(0)) {
+            return account.balance;
+        } else {
+            return IERC20(token).balanceOf(account);
+        }
+    }
+
     function safeTransfer(
         address token,
         address to,
