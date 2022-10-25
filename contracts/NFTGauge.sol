@@ -90,7 +90,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     function userWeight(uint256 tokenId, address user) external view override returns (uint256) {
-        return _lastValue(voteUserSlopes[tokenId][msg.sender]).power;
+        return _lastValue(voteUserSlopes[tokenId][user]).power;
     }
 
     function userWeightAt(
@@ -98,7 +98,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         address user,
         uint256 timestamp
     ) external view override returns (uint256) {
-        return _getValueAt(voteUserSlopes[tokenId][msg.sender], timestamp).power;
+        return _getValueAt(voteUserSlopes[tokenId][user], timestamp).power;
     }
 
     /**
