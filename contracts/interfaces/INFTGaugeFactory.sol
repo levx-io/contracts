@@ -18,6 +18,8 @@ interface INFTGaugeFactory {
 
     function feeVault() external view returns (address);
 
+    function dividendVault() external view returns (address);
+
     function feeRatio() external view returns (uint256);
 
     function ownerAdvantageRatio() external view returns (uint256);

@@ -2,11 +2,11 @@
 pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/IFeeVault.sol";
-import "./interfaces/IUniswapV2Router02.sol";
+import "./interfaces/IVotingEscrow.sol";
 import "./libraries/Tokens.sol";
 import "./libraries/Integers.sol";
+import "./libraries/UniswapV2Helper.sol";
 
 contract FeeVault is IFeeVault {
     using Integers for uint256;
@@ -16,24 +16,23 @@ contract FeeVault is IFeeVault {
         uint192 amountPerShare;
     }
 
-    address public immutable override weth;
     address public immutable override votingEscrow;
     address public immutable override rewardToken;
     address public immutable override swapRouter;
+    address public immutable override weth;
     mapping(address => uint256) public override balances;
-    mapping(address => Fee[]) public override fees;
-    mapping(address => mapping(address => uint256)) public override lastFeeClaimed;
+    mapping(address => Fee[]) public override fees; // token -> fees
+    mapping(address => mapping(address => uint256)) public override lastFeeClaimed; // token -> user -> index
 
     constructor(
-        address _weth,
         address _votingEscrow,
         address _rewardToken,
         address _swapRouter
     ) {
-        weth = _weth;
         votingEscrow = _votingEscrow;
         rewardToken = _rewardToken;
         swapRouter = _swapRouter;
+        weth = IUniswapV2Router02(swapRouter).WETH();
     }
 
     receive() external payable {
@@ -44,16 +43,30 @@ contract FeeVault is IFeeVault {
         return fees[token].length;
     }
 
-    function claimableFees(address token, uint256 to) public view override returns (uint256 amount) {
-        uint256 from = lastFeeClaimed[token][msg.sender];
+    function claimableFees(address token, address user) external view override returns (uint256 amount) {
+        return claimableFees(token, user, 0);
+    }
 
-        (int128 value, , uint256 start, ) = IVotingEscrow(votingEscrow).locked(msg.sender);
+    /**
+     * @notice Get accumulated amount of fees
+     * @param token In which currency fees were paid
+     * @param user Account to check the amount of
+     * @param toIndex the last index of the fee (exclusive)
+     */
+    function claimableFees(
+        address token,
+        address user,
+        uint256 toIndex
+    ) public view override returns (uint256 amount) {
+        if (toIndex == 0) toIndex = fees[token].length;
+
+        (int128 value, , uint256 start, ) = IVotingEscrow(votingEscrow).locked(user);
         require(value > 0, "FV: LOCK_NOT_FOUND");
 
-        for (uint256 i = from; i < to; ) {
+        for (uint256 i = lastFeeClaimed[token][user]; i < toIndex; ) {
             Fee memory fee = fees[token][i];
             if (start < fee.timestamp) {
-                uint256 balance = IVotingEscrow(votingEscrow).balanceOf(msg.sender, fee.timestamp);
+                uint256 balance = IVotingEscrow(votingEscrow).balanceOf(user, fee.timestamp);
                 if (balance > 0) amount += (balance * fee.amountPerShare) / 1e18;
             }
             unchecked {
@@ -84,45 +97,28 @@ contract FeeVault is IFeeVault {
     /**
      * @notice Claim accumulated fees
      * @param token In which currency fees were paid
-     * @param to the last index of the fee (exclusive)
+     * @param toIndex the last index of the fee (exclusive)
      * @param amountRewardMin Minimum amount of reward after swapping
      * @param path Route for swapping fees
      * @param deadline Expiration timestamp
      */
     function claimFees(
         address token,
-        uint256 to,
+        uint256 toIndex,
         uint256 amountRewardMin,
         address[] calldata path,
         uint256 deadline
     ) external override {
-        require(to < fees[token].length, "FV: INDEX_OUT_OF_RANGE");
+        require(toIndex < fees[token].length, "FV: INDEX_OUT_OF_RANGE");
         require(path[0] == (token == address(0) ? weth : token), "FV: INVALID_PATH");
         require(path[path.length - 1] == rewardToken, "FV: INVALID_PATH");
 
-        uint256 amount = claimableFees(token, to);
-        lastFeeClaimed[token][msg.sender] = to;
+        uint256 amount = claimableFees(token, msg.sender, toIndex);
+        lastFeeClaimed[token][msg.sender] = toIndex;
 
         if (amount > 0) {
-            if (token == address(0)) {
-                uint256[] memory amounts = IUniswapV2Router02(swapRouter).swapExactETHForTokens{value: amount}(
-                    amountRewardMin,
-                    path,
-                    msg.sender,
-                    deadline
-                );
-                emit ClaimFees(token, amount, amounts[amounts.length - 1], msg.sender);
-            } else {
-                IERC20(token).approve(swapRouter, amount);
-                uint256[] memory amounts = IUniswapV2Router02(swapRouter).swapExactTokensForTokens(
-                    amount,
-                    amountRewardMin,
-                    path,
-                    msg.sender,
-                    deadline
-                );
-                emit ClaimFees(token, amount, amounts[amounts.length - 1], msg.sender);
-            }
+            uint256[] memory amounts = UniswapV2Helper.swap(swapRouter, token, amount, amountRewardMin, path, deadline);
+            emit ClaimFees(token, amount, amounts[amounts.length - 1], msg.sender);
         }
     }
 }

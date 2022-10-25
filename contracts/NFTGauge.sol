@@ -9,18 +9,13 @@ import "./interfaces/IGaugeController.sol";
 import "./interfaces/IMinter.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/IFeeVault.sol";
+import "./interfaces/IDividendVault.sol";
 import "./libraries/Tokens.sol";
 import "./libraries/Math.sol";
 import "./libraries/NFTs.sol";
-import "./libraries/VotingEscrowHelper.sol";
 import "./libraries/Errors.sol";
 
 contract NFTGauge is WrappedERC721, INFTGauge {
-    struct Dividend {
-        uint64 timestamp;
-        uint192 amountPerShare;
-    }
-
     struct Point {
         uint256 bias;
         uint256 slope;
@@ -44,8 +39,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     address public override votingEscrow;
 
     mapping(uint256 => Wrap_[]) internal _wraps;
-    mapping(address => mapping(uint256 => Dividend[])) internal _dividends; // currency -> tokenId -> Dividend
-    mapping(address => mapping(uint256 => mapping(address => uint256))) internal _lastDividendClaimed; // currency -> tokenId -> user -> index
 
     int128 public override period;
     mapping(int128 => uint256) public override periodTimestamp;
@@ -94,6 +87,18 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     function voteUserSlopesLength(uint256 tokenId, address user) external view override returns (uint256) {
         return voteUserSlopes[tokenId][user].length;
+    }
+
+    function userWeight(uint256 tokenId, address user) external view override returns (uint256) {
+        return _lastValue(voteUserSlopes[tokenId][msg.sender]).power;
+    }
+
+    function userWeightAt(
+        uint256 tokenId,
+        address user,
+        uint256 timestamp
+    ) external view override returns (uint256) {
+        return _getValueAt(voteUserSlopes[tokenId][msg.sender], timestamp).power;
     }
 
     /**
@@ -224,13 +229,13 @@ contract NFTGauge is WrappedERC721, INFTGauge {
      * @param tokenId Token Id to deposit
      * @param dividendRatio Dividend ratio for the voters in bps (units of 0.01%)
      * @param to The owner of the newly minted wrapped NFT
-     * @param userWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
+     * @param voteUserWeight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
      */
     function wrap(
         uint256 tokenId,
         uint256 dividendRatio,
         address to,
-        uint256 userWeight
+        uint256 voteUserWeight
     ) external override {
         revertIfInvalidDividendRatio(dividendRatio <= 10000);
 
@@ -242,7 +247,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
             uint256 interval = _interval;
             timeSum[tokenId] = ((block.timestamp + interval) / interval) * interval;
         }
-        vote(tokenId, userWeight);
+        vote(tokenId, voteUserWeight);
 
         emit Wrap(tokenId, to);
 
@@ -263,7 +268,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         NFTs.transferFrom(nftContract, address(this), to, tokenId);
     }
 
-    function vote(uint256 tokenId, uint256 userWeight) public override {
+    function vote(uint256 tokenId, uint256 voteUserWeight) public override {
         revertIfNonExistent(_exists(tokenId));
         revertIfVotedTooEarly(block.timestamp >= lastUserVote[tokenId][msg.sender] + _weightVoteDelay);
 
@@ -273,13 +278,13 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 slope = uint256(uint128(IVotingEscrow(escrow).getLastUserSlope(msg.sender)));
         uint256 lockEnd = IVotingEscrow(escrow).unlockTime(msg.sender);
 
-        uint256 powerUsed = _updateSlopes(tokenId, msg.sender, slope, lockEnd, userWeight);
+        uint256 powerUsed = _updateSlopes(tokenId, msg.sender, slope, lockEnd, voteUserWeight);
         IGaugeController(controller).voteForGaugeWeights(msg.sender, powerUsed);
 
         // Record last action time
         lastUserVote[tokenId][msg.sender] = block.timestamp;
 
-        emit Vote(tokenId, msg.sender, userWeight);
+        emit Vote(tokenId, msg.sender, voteUserWeight);
     }
 
     function revoke(uint256 tokenId) public override {
@@ -295,33 +300,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         lastUserVote[tokenId][msg.sender] = block.timestamp;
 
         emit Vote(tokenId, msg.sender, 0);
-    }
-
-    function claimDividends(
-        address token,
-        uint256 tokenId,
-        uint256 to
-    ) external override {
-        require(to < _dividends[token][tokenId].length, "NFTGF: INDEX_OUT_OF_RANGE");
-
-        uint256 from = _lastDividendClaimed[token][tokenId][msg.sender];
-
-        uint256 amount;
-        for (uint256 i = from; i < to; ) {
-            Dividend memory dividend = _dividends[token][tokenId][i];
-            uint256 balance = VotingEscrowHelper.balanceOf(votingEscrow, msg.sender, dividend.timestamp);
-            if (balance > 0) {
-                uint256 userWeight = _getValueAt(voteUserSlopes[tokenId][msg.sender], dividend.timestamp).power;
-                amount += (balance * userWeight * dividend.amountPerShare) / 10000 / 1e18;
-            }
-            unchecked {
-                ++i;
-            }
-        }
-        _lastDividendClaimed[token][tokenId][msg.sender] = to;
-
-        emit ClaimDividends(token, tokenId, amount, msg.sender);
-        Tokens.safeTransfer(token, msg.sender, amount, _weth);
     }
 
     /**
@@ -394,7 +372,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         address user,
         uint256 slope,
         uint256 lockEnd,
-        uint256 userWeight
+        uint256 voteUserWeight
     ) internal returns (uint256 powerUsed) {
         uint256 interval = _interval;
         uint256 nextTime = ((block.timestamp + interval) / interval) * interval;
@@ -404,8 +382,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 oldDt;
         if (oldSlope.end > nextTime) oldDt = oldSlope.end - nextTime;
         VotedSlope memory newSlope = VotedSlope(
-            (slope * userWeight) / 10000,
-            userWeight,
+            (slope * voteUserWeight) / 10000,
+            voteUserWeight,
             uint64(lockEnd),
             uint64(block.timestamp)
         );
@@ -440,6 +418,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         address to,
         uint256 amount
     ) internal override {
+        _getSum(tokenId);
+
         address weth = _weth;
         uint256 royalty;
         if (_supportsERC2981) {
@@ -450,22 +430,21 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         }
 
         address _factory = factory;
-        address vault = INFTGaugeFactory(_factory).feeVault();
         uint256 fee = INFTGaugeFactory(_factory).calculateFee(currency, amount - royalty);
-        Tokens.safeTransfer(currency, vault, fee, weth);
-        IFeeVault(vault).checkpoint(currency);
+        if (fee > 0) {
+            address feeVault = INFTGaugeFactory(_factory).feeVault();
+            Tokens.safeTransfer(currency, feeVault, fee, weth);
+            IFeeVault(feeVault).checkpoint(currency);
+        }
 
         uint256 dividend;
         uint256 length = _wraps[tokenId].length;
         if (length > 0) {
-            _getSum(tokenId);
-            uint256 interval = _interval;
-            uint256 time = (block.timestamp / interval) * interval;
-            uint256 sum = pointsSum[tokenId][time].bias;
-            if (sum > 0) {
-                dividend = ((amount - royalty - fee) * _wraps[tokenId][length - 1].dividendRatio) / 10000;
-                _dividends[currency][tokenId].push(Dividend(uint64(time), uint192((dividend * 1e18) / sum)));
-                emit DistributeDividend(currency, tokenId, dividend);
+            dividend = ((amount - royalty - fee) * _wraps[tokenId][length - 1].dividendRatio) / 10000;
+            if (dividend > 0) {
+                address dividendVault = INFTGaugeFactory(_factory).dividendVault();
+                Tokens.safeTransfer(currency, dividendVault, dividend, weth);
+                IDividendVault(dividendVault).checkpoint(currency, address(this), tokenId);
             }
         }
         Tokens.safeTransfer(currency, to, amount - royalty - fee - dividend, weth);

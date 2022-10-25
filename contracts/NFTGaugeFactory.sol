@@ -16,6 +16,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     address public immutable override votingEscrow;
     address public immutable override discountToken;
     address public immutable override feeVault;
+    address public immutable override dividendVault;
 
     address public _target;
 
@@ -30,6 +31,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         address _minter,
         address _discountToken,
         address _feeVault,
+        address _dividendVault,
         uint256 _feeRatio,
         uint256 _ownerAdvantageRatio
     ) {
@@ -39,6 +41,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         votingEscrow = IGaugeController(_controller).votingEscrow();
         discountToken = _discountToken;
         feeVault = _feeVault;
+        dividendVault = _dividendVault;
         feeRatio = _feeRatio;
         ownerAdvantageRatio = _ownerAdvantageRatio;
 

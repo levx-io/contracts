@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 interface IFeeVault {
     event Checkpoint(address indexed token, uint256 id, uint256 amount);
-    event ClaimFees(address indexed token, uint256 amount, uint256 amountReward, address indexed to);
+    event ClaimFees(address indexed token, uint256 amountToken, uint256 amountReward, address indexed to);
 
     function weth() external view returns (address);
 
@@ -21,13 +21,19 @@ interface IFeeVault {
 
     function feesLength(address token) external view returns (uint256);
 
-    function claimableFees(address token, uint256 to) external view returns (uint256 amount);
+    function claimableFees(address token, address user) external view returns (uint256 amount);
+
+    function claimableFees(
+        address token,
+        address user,
+        uint256 toIndex
+    ) external view returns (uint256 amount);
 
     function checkpoint(address token) external;
 
     function claimFees(
         address token,
-        uint256 to,
+        uint256 toIndex,
         uint256 amountRewardMin,
         address[] calldata path,
         uint256 deadline

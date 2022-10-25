@@ -7,8 +7,6 @@ interface INFTGauge is IWrappedERC721 {
     event Wrap(uint256 indexed tokenId, address indexed to);
     event Unwrap(uint256 indexed tokenId, address indexed to);
     event Vote(uint256 indexed tokenId, address indexed user, uint256 weight);
-    event DistributeDividend(address indexed token, uint256 indexed tokenId, uint256 amount);
-    event ClaimDividends(address indexed token, uint256 indexed tokenId, uint256 amount, address indexed to);
 
     function initialize(address _nftContract, address _minter) external;
 
@@ -56,6 +54,14 @@ interface INFTGauge is IWrappedERC721 {
 
     function voteUserSlopesLength(uint256 tokenId, address user) external view returns (uint256);
 
+    function userWeight(uint256 tokenId, address user) external view returns (uint256);
+
+    function userWeightAt(
+        uint256 tokenId,
+        address user,
+        uint256 timestamp
+    ) external view returns (uint256);
+
     function killMe() external;
 
     function userCheckpoint(uint256 tokenId, address user) external;
@@ -72,10 +78,4 @@ interface INFTGauge is IWrappedERC721 {
     function vote(uint256 tokenId, uint256 userWeight) external;
 
     function revoke(uint256 tokenId) external;
-
-    function claimDividends(
-        address token,
-        uint256 tokenId,
-        uint256 to
-    ) external;
 }
