@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-interface IVotingEscrowMigrator {
+import "./IBase.sol";
+
+interface IVotingEscrowMigrator is IBase {
+    error NotPreMigrated();
+
     function migrate(
         address account,
         int128 amount,

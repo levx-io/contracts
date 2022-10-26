@@ -2,9 +2,10 @@
 pragma solidity ^0.8.15;
 
 import "./legacy/LPVotingEscrowDelegateLegacy.sol";
+import "./base/Base.sol";
 import "./libraries/Integers.sol";
 
-contract LPVotingEscrowDelegate is LPVotingEscrowDelegateLegacy, IVotingEscrowMigrator {
+contract LPVotingEscrowDelegate is LPVotingEscrowDelegateLegacy, Base, IVotingEscrowMigrator {
     using SafeERC20 for IERC20;
     using Integers for int128;
 
@@ -25,6 +26,10 @@ contract LPVotingEscrowDelegate is LPVotingEscrowDelegateLegacy, IVotingEscrowMi
         legacy = _legacy;
     }
 
+    function revertIfNotPreMigrated(bool success) internal pure {
+        if (!success) revert NotPreMigrated();
+    }
+
     function preMigrate() external {
         lockedLegacy[msg.sender] = LPVotingEscrowDelegateLegacy(legacy).locked(msg.sender);
     }
@@ -37,10 +42,10 @@ contract LPVotingEscrowDelegate is LPVotingEscrowDelegateLegacy, IVotingEscrowMi
         uint256 end,
         address[] calldata
     ) external {
-        require(msg.sender == ve, "LPVED: FORBIDDEN");
+        revertIfForbidden(msg.sender == ve);
 
         uint256 amount = lockedLegacy[account];
-        require(amount > 0, "LPVED: PRE_MIGRATE_FIRST");
+        revertIfNotPreMigrated(amount > 0);
 
         lockedLegacy[account] = 0;
 
