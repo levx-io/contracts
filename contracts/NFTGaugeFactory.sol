@@ -9,6 +9,10 @@ import "./interfaces/INFTGaugeFactory.sol";
 import "./libraries/Integers.sol";
 import "./NFTGauge.sol";
 
+/**
+ * @title Factory for creating gauges that wrap NFTs
+ * @author LevX (team@levx.io)
+ */
 contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
     using SafeERC20 for IERC20;
 
@@ -70,6 +74,11 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
         if (!success) revert NonWhitelistedCurrency();
     }
 
+    /**
+     * @notice Calculate fee to be paid
+     * @param token In which token the fee will be paid
+     * @param amount Entire amount of the trade
+     */
     function calculateFee(address token, uint256 amount) external view returns (uint256 fee) {
         fee = (amount * feeRatio) / 10000;
         if (token == discountToken) {
@@ -85,12 +94,21 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
         NFTGauge(addr).killMe();
     }
 
+    /**
+     * @notice Update whether to whitelist `token` or not
+     * @param token Token contract address
+     * @param whitelisted To whitelist it or not
+     */
     function updateCurrencyWhitelisted(address token, bool whitelisted) external override onlyOwner {
         currencyWhitelisted[token] = whitelisted;
 
         emit UpdateCurrencyWhitelisted(token, whitelisted);
     }
 
+    /**
+     * @notice Update fee ratio (Fee is charged for every trade)
+     * @param ratio New ratio
+     */
     function updateFeeRatio(uint256 ratio) public override onlyOwner {
         revertIfInvalidFeeRatio(ratio < 10000);
 
@@ -99,6 +117,10 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
         emit UpdateFeeRatio(ratio);
     }
 
+    /**
+     * @notice Update owner advantage ratio (Owner advantage goes to the owner of the NFT out of the emissions)
+     * @param ratio New ratio
+     */
     function updateOwnerAdvantageRatio(uint256 ratio) public override onlyOwner {
         revertIfInvalidOwnerAdvantageRatio(ratio < 10000);
 
@@ -107,6 +129,10 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
         emit UpdateOwnerAdvantageRatio(ratio);
     }
 
+    /**
+     * @notice Create a new gauge that wraps `nftContract`
+     * @param nftContract NFT contract address
+     */
     function createNFTGauge(address nftContract) external override returns (address gauge) {
         revertIfExistent(gauges[nftContract] == address(0));
 
@@ -119,6 +145,11 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
         emit CreateNFTGauge(nftContract, gauge);
     }
 
+    /**
+     * @notice Transfer `amount` of `currency` from `from` to the caller
+     * @dev Caller must be a gauge
+     * @param currency Token address
+     */
     function executePayment(
         address currency,
         address from,

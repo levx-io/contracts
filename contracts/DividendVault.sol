@@ -11,6 +11,10 @@ import "./libraries/Tokens.sol";
 import "./libraries/Integers.sol";
 import "./libraries/UniswapV2Helper.sol";
 
+/**
+ * @title Vault for storing dividends generated from NFT trades
+ * @author LevX (team@levx.io)
+ */
 contract DividendVault is Base, IDividendVault {
     using Integers for uint256;
 

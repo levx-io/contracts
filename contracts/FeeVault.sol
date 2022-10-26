@@ -9,6 +9,10 @@ import "./libraries/Tokens.sol";
 import "./libraries/Integers.sol";
 import "./libraries/UniswapV2Helper.sol";
 
+/**
+ * @title Vault for storing fees generated from NFT trades
+ * @author LevX (team@levx.io)
+ */
 contract FeeVault is Base, IFeeVault {
     using Integers for uint256;
 
@@ -44,6 +48,11 @@ contract FeeVault is Base, IFeeVault {
         return fees[token].length;
     }
 
+    /**
+     * @notice Get accumulated amount of fees to the latest
+     * @param token In which currency fees were paid
+     * @param user Account to check the amount of
+     */
     function claimableFees(address token, address user) external view override returns (uint256 amount) {
         return claimableFees(token, user, 0);
     }

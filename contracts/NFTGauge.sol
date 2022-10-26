@@ -12,6 +12,10 @@ import "./interfaces/IFeeVault.sol";
 import "./interfaces/IDividendVault.sol";
 import "./libraries/NFTs.sol";
 
+/**
+ * @title Gauge contract for wrapping NFTs
+ * @author LevX (team@levx.io)
+ */
 contract NFTGauge is WrappedERC721, INFTGauge {
     struct Point {
         uint256 bias;
