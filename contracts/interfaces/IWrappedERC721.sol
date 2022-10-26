@@ -4,7 +4,6 @@ pragma solidity ^0.8.0;
 import "./IERC721NonTransferable.sol";
 
 interface IWrappedERC721 is IERC721NonTransferable {
-    error NonExistent();
     error InvalidDeadline();
     error InvalidCurrency();
     error InvalidOffer();

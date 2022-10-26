@@ -11,4 +11,12 @@ abstract contract Base is IBase {
     function revertIfExpired(bool success) internal pure {
         if (!success) revert Expired();
     }
+
+    function revertIfExistent(bool success) internal pure {
+        if (!success) revert Existent();
+    }
+
+    function revertIfNonExistent(bool success) internal pure {
+        if (!success) revert NonExistent();
+    }
 }

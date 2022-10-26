@@ -4,4 +4,6 @@ pragma solidity ^0.8.0;
 interface IBase {
     error Forbidden();
     error Expired();
+    error Existent();
+    error NonExistent();
 }

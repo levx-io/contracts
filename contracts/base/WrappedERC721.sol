@@ -55,10 +55,6 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
         __ERC721_init(string(abi.encodePacked("Wrapped ", name)), symbol);
     }
 
-    function revertIfNonExistent(bool success) internal pure {
-        if (!success) revert NonExistent();
-    }
-
     function revertIfInvalidDeadline(bool success) internal pure {
         if (!success) revert InvalidDeadline();
     }

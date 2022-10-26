@@ -82,10 +82,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         if (!success) revert InvalidDividendRatio();
     }
 
-    function revertIfExistent(bool success) internal pure {
-        if (!success) revert Existent();
-    }
-
     function revertIfVotedTooEarly(bool success) internal pure {
         if (!success) revert VotedTooEarly();
     }

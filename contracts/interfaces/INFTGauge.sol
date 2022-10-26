@@ -5,7 +5,6 @@ import "./IWrappedERC721.sol";
 
 interface INFTGauge is IWrappedERC721 {
     error InvalidDividendRatio();
-    error Existent();
     error VotedTooEarly();
 
     event Wrap(uint256 indexed tokenId, address indexed to);

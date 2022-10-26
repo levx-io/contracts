@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-interface IGaugeController {
+import "./IBase.sol";
+
+interface IGaugeController is IBase {
+    error InvalidGaugeType();
+    error InvalidVotingPower();
+    error AllVotingPowerUsed();
+
     event AddType(string name, int128 gaugeType);
     event NewTypeWeight(int128 gaugeType, uint256 time, uint256 weight, uint256 totalWeight);
     event VoteForGauge(uint256 time, address user, address addr, uint256 weight);
