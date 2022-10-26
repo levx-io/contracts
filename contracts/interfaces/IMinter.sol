@@ -8,9 +8,9 @@ interface IMinter is IBase {
     error NoAmountToMint();
 
     event UpdateMiningParameters(uint256 time, uint256 rate, uint256 supply);
-    event UpdateTreasury(address treasury);
+    event UpdateDev(address dev);
     event Minted(address indexed recipient, address indexed gaugeAddr, uint256 indexed tokenId, uint256 minted);
-    event MintedForTreasury(address indexed treasury, uint256 minted);
+    event MintedDevFee(address indexed dev, uint256 minted);
 
     function token() external view returns (address);
 
@@ -24,7 +24,7 @@ interface IMinter is IBase {
 
     function rateReductionCoefficient() external view returns (uint256);
 
-    function treasury() external view returns (address);
+    function dev() external view returns (address);
 
     function miningEpoch() external view returns (int128);
 
@@ -38,7 +38,7 @@ interface IMinter is IBase {
 
     function mintedTotal() external view returns (uint256);
 
-    function mintedForTreasury() external view returns (uint256);
+    function mintedDevFee() external view returns (uint256);
 
     function minted(
         address gaugeAddr,
@@ -46,7 +46,7 @@ interface IMinter is IBase {
         address user
     ) external view returns (uint256);
 
-    function updateTreasury(address newTreasury) external;
+    function updateDev(address newDev) external;
 
     function updateMiningParameters() external;
 
@@ -56,5 +56,5 @@ interface IMinter is IBase {
 
     function mint(address gaugeAddr, uint256 tokenId) external;
 
-    function mintForTreasury() external;
+    function mintDevFee() external;
 }

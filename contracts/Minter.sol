@@ -10,6 +10,10 @@ interface IToken {
     function mint(address account, uint256 value) external;
 }
 
+/**
+ * @title Token Minter
+ * @author LevX (team@levx.io)
+ */
 contract Minter is Base, IMinter {
     uint256 internal constant RATE_DENOMINATOR = 1e18;
     uint256 internal constant INFLATION_DELAY = 86400;
@@ -21,13 +25,13 @@ contract Minter is Base, IMinter {
     uint256 public immutable override rateReductionTime;
     uint256 public immutable override rateReductionCoefficient;
 
-    address public override treasury;
+    address public override dev;
     int128 public override miningEpoch;
     uint256 public override startEpochTime;
     uint256 public override rate;
 
     uint256 public override mintedTotal;
-    uint256 public override mintedForTreasury;
+    uint256 public override mintedDevFee;
     mapping(address => mapping(uint256 => mapping(address => uint256))) public override minted; // gauge -> tokenId -> user -> amount
 
     uint256 internal startEpochSupply;
@@ -39,7 +43,7 @@ contract Minter is Base, IMinter {
         uint256 _initialRate,
         uint256 _rateReductionTime,
         uint256 _rateReductionCoefficient,
-        address _treasury
+        address _dev
     ) {
         token = _token;
         controller = _controller;
@@ -47,7 +51,7 @@ contract Minter is Base, IMinter {
         initialRate = _initialRate;
         rateReductionTime = _rateReductionTime;
         rateReductionCoefficient = _rateReductionCoefficient;
-        treasury = _treasury;
+        dev = _dev;
 
         startEpochTime = block.timestamp + INFLATION_DELAY - rateReductionTime;
         miningEpoch = -1;
@@ -118,10 +122,14 @@ contract Minter is Base, IMinter {
         return toMint;
     }
 
-    function updateTreasury(address newTreasury) external override {
-        revertIfForbidden(msg.sender == treasury);
-        treasury = newTreasury;
-        emit UpdateTreasury(newTreasury);
+    /**
+     * @notice Update the dev address to receive 3.33% emissions
+     * @param newDev new dev address
+     */
+    function updateDev(address newDev) external override {
+        revertIfForbidden(msg.sender == dev);
+        dev = newDev;
+        emit UpdateDev(newDev);
     }
 
     /**
@@ -180,15 +188,18 @@ contract Minter is Base, IMinter {
         IToken(token).mint(msg.sender, toMint);
     }
 
-    function mintForTreasury() external override {
-        uint256 totalMint = mintedTotal / 10;
-        uint256 toMint = totalMint - mintedForTreasury;
+    /**
+     * @notice Mint dev fee (3.33% of total amount minted)
+     */
+    function mintDevFee() external override {
+        uint256 totalMint = mintedTotal / 33;
+        uint256 toMint = totalMint - mintedDevFee;
         revertIfNoAmountToMint(toMint > 0);
 
-        mintedForTreasury = totalMint;
+        mintedDevFee = totalMint;
 
-        emit MintedForTreasury(treasury, totalMint);
-        IToken(token).mint(treasury, toMint);
+        emit MintedDevFee(dev, totalMint);
+        IToken(token).mint(dev, toMint);
     }
 
     function _availableSupply() internal view returns (uint256) {
