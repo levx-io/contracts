@@ -4,11 +4,12 @@ pragma solidity ^0.8.15;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "./base/CloneFactory.sol";
+import "./base/Base.sol";
 import "./interfaces/INFTGaugeFactory.sol";
 import "./libraries/Integers.sol";
 import "./NFTGauge.sol";
 
-contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
+contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
     using SafeERC20 for IERC20;
 
     address public immutable override weth;
@@ -57,6 +58,18 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         // Empty
     }
 
+    function revertIfInvalidFeeRatio(bool success) internal pure {
+        if (!success) revert InvalidFeeRatio();
+    }
+
+    function revertIfInvalidOwnerAdvantageRatio(bool success) internal pure {
+        if (!success) revert InvalidOwnerAdvantageRatio();
+    }
+
+    function revertIfNonWhitelistedCurrency(bool success) internal pure {
+        if (!success) revert NonWhitelistedCurrency();
+    }
+
     function calculateFee(address token, uint256 amount) external view returns (uint256 fee) {
         fee = (amount * feeRatio) / 10000;
         if (token == discountToken) {
@@ -79,7 +92,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     }
 
     function updateFeeRatio(uint256 ratio) public override onlyOwner {
-        require(ratio < 10000, "NFTGF: INVALID_FEE_RATIO");
+        revertIfInvalidFeeRatio(ratio < 10000);
 
         feeRatio = ratio;
 
@@ -87,7 +100,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     }
 
     function updateOwnerAdvantageRatio(uint256 ratio) public override onlyOwner {
-        require(ratio < 10000, "NFTGF: INVALID_FEE_RATIO");
+        revertIfInvalidOwnerAdvantageRatio(ratio < 10000);
 
         ownerAdvantageRatio = ratio;
 
@@ -95,7 +108,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     }
 
     function createNFTGauge(address nftContract) external override returns (address gauge) {
-        require(gauges[nftContract] == address(0), "NFTGF: GAUGE_CREATED");
+        revertIfExistent(gauges[nftContract] == address(0));
 
         gauge = _createClone(_target);
         INFTGauge(gauge).initialize(nftContract, minter);
@@ -111,8 +124,8 @@ contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
         address from,
         uint256 amount
     ) external override {
-        require(isGauge[msg.sender], "NFTGF: FORBIDDEN");
-        require(currencyWhitelisted[currency], "NFTGF: INVALID_TOKEN");
+        revertIfForbidden(isGauge[msg.sender]);
+        revertIfNonWhitelistedCurrency(currencyWhitelisted[currency]);
 
         IERC20(currency).safeTransferFrom(from, msg.sender, amount);
     }

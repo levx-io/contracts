@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-interface INFTGaugeFactory {
+import "./IBase.sol";
+
+interface INFTGaugeFactory is IBase {
+    error InvalidFeeRatio();
+    error InvalidOwnerAdvantageRatio();
+    error NonWhitelistedCurrency();
+
     event UpgradeTarget(address target, uint256 indexed version);
     event CreateNFTGauge(address indexed nftContract, address indexed gauge);
     event UpdateCurrencyWhitelisted(address indexed token, bool whitelisted);
