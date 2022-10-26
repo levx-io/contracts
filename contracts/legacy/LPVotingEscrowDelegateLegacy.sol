@@ -2,11 +2,12 @@
 pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "../interfaces/IUniswapV2Pair.sol";
+import "../base/Base.sol";
 import "../base/VotingEscrowDelegate.sol";
+import "../interfaces/IUniswapV2Pair.sol";
 import "../interfaces/IVotingEscrowMigrator.sol";
 
-contract LPVotingEscrowDelegateLegacy is VotingEscrowDelegate {
+contract LPVotingEscrowDelegateLegacy is Base, VotingEscrowDelegate {
     using SafeERC20 for IERC20;
 
     struct LockedBalance {
@@ -39,7 +40,7 @@ contract LPVotingEscrowDelegateLegacy is VotingEscrowDelegate {
         uint256 duration,
         bool discounted
     ) internal override {
-        require(amount >= minAmount, "LSVED: AMOUNT_TOO_LOW");
+        revertIfInvalidAmount(amount >= minAmount);
 
         super._createLock(amount, duration, discounted);
 
@@ -49,7 +50,7 @@ contract LPVotingEscrowDelegateLegacy is VotingEscrowDelegate {
     }
 
     function _increaseAmount(uint256 amount, bool discounted) internal override {
-        require(amount >= minAmount, "LSVED: AMOUNT_TOO_LOW");
+        revertIfInvalidAmount(amount >= minAmount);
 
         super._increaseAmount(amount, discounted);
 
@@ -79,10 +80,10 @@ contract LPVotingEscrowDelegateLegacy is VotingEscrowDelegate {
     }
 
     function withdraw(address addr, uint256 penaltyRate) external override {
-        require(msg.sender == ve, "LSVED: FORBIDDEN");
+        revertIfForbidden(msg.sender == ve);
 
         uint256 amount = locked[addr];
-        require(amount > 0, "LSVED: LOCK_NOT_FOUND");
+        revertIfNonExistent(amount > 0);
 
         lockedTotal -= amount;
         locked[addr] = 0;

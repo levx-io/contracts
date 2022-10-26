@@ -5,7 +5,7 @@ import "./legacy/LPVotingEscrowDelegateLegacy.sol";
 import "./base/Base.sol";
 import "./libraries/Integers.sol";
 
-contract LPVotingEscrowDelegate is LPVotingEscrowDelegateLegacy, Base, IVotingEscrowMigrator {
+contract LPVotingEscrowDelegate is Base, LPVotingEscrowDelegateLegacy, IVotingEscrowMigrator {
     using SafeERC20 for IERC20;
     using Integers for int128;
 

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
+import "./Base.sol";
 import "../interfaces/IVotingEscrowDelegate.sol";
 import "../interfaces/IVotingEscrow.sol";
 import "../interfaces/INFT.sol";
 
-abstract contract VotingEscrowDelegate is IVotingEscrowDelegate {
+abstract contract VotingEscrowDelegate is Base, IVotingEscrowDelegate {
     address public immutable ve;
     address public immutable token;
     address public immutable discountToken;
@@ -30,8 +31,16 @@ abstract contract VotingEscrowDelegate is IVotingEscrowDelegate {
     }
 
     modifier eligibleForDiscount {
-        require(INFT(discountToken).balanceOf(msg.sender) > 0, "VED: DISCOUNT_TOKEN_NOT_OWNED");
+        revertIfNotEligible(INFT(discountToken).balanceOf(msg.sender) > 0);
         _;
+    }
+
+    function revertIfNotEligible(bool success) internal pure {
+        if (!success) revert NotEligible();
+    }
+
+    function revertIfDurationTooLong(bool success) internal pure {
+        if (!success) revert DurationTooLong();
     }
 
     function createLockDiscounted(uint256 amount, uint256 duration) external eligibleForDiscount {
@@ -47,7 +56,7 @@ abstract contract VotingEscrowDelegate is IVotingEscrowDelegate {
         uint256 duration,
         bool discounted
     ) internal virtual {
-        require(duration <= _maxDuration, "VED: DURATION_TOO_LONG");
+        revertIfDurationTooLong(duration <= _maxDuration);
 
         uint256 unlockTime = ((block.timestamp + duration) / _interval) * _interval; // rounded down to a multiple of interval
         uint256 _duration = unlockTime - block.timestamp;
@@ -70,7 +79,7 @@ abstract contract VotingEscrowDelegate is IVotingEscrowDelegate {
 
     function _increaseAmount(uint256 amount, bool discounted) internal virtual {
         uint256 unlockTime = IVotingEscrow(ve).unlockTime(msg.sender);
-        require(unlockTime > 0, "VED: LOCK_NOT_FOUND");
+        revertIfNonExistent(unlockTime > 0);
 
         (uint256 amountVE, uint256 amountToken) = _getAmounts(amount, unlockTime - block.timestamp);
         if (discounted) {
