@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
+import "./base/Base.sol";
 import "./interfaces/IMinter.sol";
 import "./interfaces/IGaugeController.sol";
 import "./interfaces/INFTGauge.sol";
@@ -9,7 +10,7 @@ interface IToken {
     function mint(address account, uint256 value) external;
 }
 
-contract Minter is IMinter {
+contract Minter is Base, IMinter {
     uint256 internal constant RATE_DENOMINATOR = 1e18;
     uint256 internal constant INFLATION_DELAY = 86400;
 
@@ -54,6 +55,22 @@ contract Minter is IMinter {
         startEpochSupply = initialSupply;
     }
 
+    function revertIfInvalidTimeRange(bool success) internal pure {
+        if (!success) revert InvalidTimeRange();
+    }
+
+    function revertIfTooLate(bool success) internal pure {
+        if (!success) revert TooLate();
+    }
+
+    function revertIfTooSoon(bool success) internal pure {
+        if (!success) revert TooSoon();
+    }
+
+    function revertIfNoAmountToMint(bool success) internal pure {
+        if (!success) revert NoAmountToMint();
+    }
+
     /**
      * @notice Current number of tokens in existence (claimed or unclaimed)
      */
@@ -68,7 +85,7 @@ contract Minter is IMinter {
      * @return Tokens mintable from `start` till `end`
      */
     function mintableInTimeframe(uint256 start, uint256 end) external view returns (uint256) {
-        require(start <= end, "MT: INVALID_TIME_RANGE");
+        revertIfInvalidTimeRange(start <= end);
         uint256 toMint = 0;
         uint256 currentEpochTime = startEpochTime;
         uint256 currentRate = rate;
@@ -79,7 +96,7 @@ contract Minter is IMinter {
             currentRate = (currentRate * RATE_DENOMINATOR) / rateReductionCoefficient;
         }
 
-        require(end <= currentEpochTime + rateReductionTime, "MT: TOO_FAR_IN_FUTURE");
+        revertIfTooLate(end <= currentEpochTime + rateReductionTime);
 
         // Number of rate changes MUST be less than 10,000
         for (uint256 i; i < 10000; ) {
@@ -99,7 +116,7 @@ contract Minter is IMinter {
 
             currentEpochTime -= rateReductionTime;
             currentRate = (currentRate * rateReductionCoefficient) / RATE_DENOMINATOR; // double-division with rounding made rate a bit less => good
-            require(currentRate <= initialRate, "MT: THIS_SHOULD_NEVER_HAPPEN");
+            assert(currentRate <= initialRate);
 
             unchecked {
                 ++i;
@@ -110,7 +127,7 @@ contract Minter is IMinter {
     }
 
     function updateTreasury(address newTreasury) external override {
-        require(msg.sender == treasury, "MT: FORBIDDEN");
+        revertIfForbidden(msg.sender == treasury);
         treasury = newTreasury;
         emit UpdateTreasury(newTreasury);
     }
@@ -121,7 +138,7 @@ contract Minter is IMinter {
      *      Total supply becomes slightly larger if this function is called late
      */
     function updateMiningParameters() external override {
-        require(block.timestamp >= startEpochTime + rateReductionTime, "MT: TOO_SOON");
+        revertIfTooSoon(block.timestamp >= startEpochTime + rateReductionTime);
         _updateMiningParameters();
     }
 
@@ -157,12 +174,12 @@ contract Minter is IMinter {
      * @param tokenId tokenId
      */
     function mint(address gaugeAddr, uint256 tokenId) external override {
-        require(IGaugeController(controller).gaugeTypes(gaugeAddr) >= 0, "MT: GAUGE_NOT_ADDED");
+        revertIfNonExistent(IGaugeController(controller).gaugeTypes(gaugeAddr) >= 0);
 
         INFTGauge(gaugeAddr).userCheckpoint(tokenId, msg.sender);
         uint256 totalMint = INFTGauge(gaugeAddr).integrateFraction(tokenId, msg.sender);
         uint256 toMint = totalMint - minted[gaugeAddr][tokenId][msg.sender];
-        require(toMint > 0, "MT: NO_AMOUNT_TO_MINT");
+        revertIfNoAmountToMint(toMint > 0);
 
         mintedTotal += toMint;
         minted[gaugeAddr][tokenId][msg.sender] = totalMint;
@@ -174,7 +191,7 @@ contract Minter is IMinter {
     function mintForTreasury() external override {
         uint256 totalMint = mintedTotal / 10;
         uint256 toMint = totalMint - mintedForTreasury;
-        require(toMint > 0, "MT: NO_AMOUNT_TO_MINT");
+        revertIfNoAmountToMint(toMint > 0);
 
         mintedForTreasury = totalMint;
 

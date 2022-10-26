@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-interface IMinter {
+import "./IBase.sol";
+
+interface IMinter is IBase {
+    error InvalidTimeRange();
+    error TooLate();
+    error TooSoon();
+    error NoAmountToMint();
+
     event UpdateMiningParameters(uint256 time, uint256 rate, uint256 supply);
     event UpdateTreasury(address treasury);
     event Minted(address indexed recipient, address indexed gaugeAddr, uint256 indexed tokenId, uint256 minted);
