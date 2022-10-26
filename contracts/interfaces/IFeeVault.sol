@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-interface IFeeVault {
+import "./IBase.sol";
+
+interface IFeeVault is IBase {
     event Checkpoint(address indexed token, uint256 id, uint256 amount);
     event ClaimFees(address indexed token, uint256 amountToken, uint256 amountReward, address indexed to);
 

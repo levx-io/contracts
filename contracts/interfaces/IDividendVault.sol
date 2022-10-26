@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-interface IDividendVault {
+import "./IBase.sol";
+
+interface IDividendVault is IBase {
     event Checkpoint(address indexed token, address indexed gauge, uint256 indexed tokenId, uint256 id, uint256 amount);
     event ClaimDividends(address indexed token, uint256 amountToken, uint256 amountReward, address indexed to);
 

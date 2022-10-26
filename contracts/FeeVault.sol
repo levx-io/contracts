@@ -2,13 +2,14 @@
 pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./base/Base.sol";
 import "./interfaces/IFeeVault.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./libraries/Tokens.sol";
 import "./libraries/Integers.sol";
 import "./libraries/UniswapV2Helper.sol";
 
-contract FeeVault is IFeeVault {
+contract FeeVault is Base, IFeeVault {
     using Integers for uint256;
 
     struct Fee {
@@ -61,7 +62,7 @@ contract FeeVault is IFeeVault {
         if (toIndex == 0) toIndex = fees[token].length;
 
         (int128 value, , uint256 start, ) = IVotingEscrow(votingEscrow).locked(user);
-        require(value > 0, "FV: LOCK_NOT_FOUND");
+        revertIfNonExistent(value > 0);
 
         for (uint256 i = lastFeeClaimed[token][user]; i < toIndex; ) {
             Fee memory fee = fees[token][i];
@@ -109,9 +110,9 @@ contract FeeVault is IFeeVault {
         address[] calldata path,
         uint256 deadline
     ) external override {
-        require(toIndex < fees[token].length, "FV: INDEX_OUT_OF_RANGE");
-        require(path[0] == (token == address(0) ? weth : token), "FV: INVALID_PATH");
-        require(path[path.length - 1] == rewardToken, "FV: INVALID_PATH");
+        revertIfOutOfRange(toIndex < fees[token].length);
+        revertIfInvalidPath(path[0] == (token == address(0) ? weth : token));
+        revertIfInvalidPath(path[path.length - 1] == rewardToken);
 
         uint256 amount = claimableFees(token, msg.sender, toIndex);
         lastFeeClaimed[token][msg.sender] = toIndex;

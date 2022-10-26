@@ -31,4 +31,12 @@ abstract contract Base is IBase {
     function revertIfInvalidAmount(bool success) internal pure {
         if (!success) revert InvalidAmount();
     }
+
+    function revertIfInvalidPath(bool success) internal pure {
+        if (!success) revert InvalidPath();
+    }
+
+    function revertIfOutOfRange(bool success) internal pure {
+        if (!success) revert OutOfRange();
+    }
 }

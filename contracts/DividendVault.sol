@@ -2,6 +2,7 @@
 pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./base/Base.sol";
 import "./interfaces/IDividendVault.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/INFTGauge.sol";
@@ -10,7 +11,7 @@ import "./libraries/Tokens.sol";
 import "./libraries/Integers.sol";
 import "./libraries/UniswapV2Helper.sol";
 
-contract DividendVault is IDividendVault {
+contract DividendVault is Base, IDividendVault {
     using Integers for uint256;
 
     struct Dividend {
@@ -79,7 +80,7 @@ contract DividendVault is IDividendVault {
         for (uint256 i; i < gauges.length; ) {
             address gauge = gauges[i];
             uint256 toIndex = toIndices[i];
-            require(toIndex < dividends[token][gauge].length, "DV: INDEX_OUT_OF_RANGE");
+            revertIfOutOfRange(toIndex < dividends[token][gauge].length);
             if (toIndex == 0) toIndex = dividends[token][gauge].length;
 
             for (uint256 j = lastDividendClaimed[token][gauge][msg.sender]; j < toIndex; ) {
@@ -142,8 +143,8 @@ contract DividendVault is IDividendVault {
         address[] calldata path,
         uint256 deadline
     ) external override {
-        require(path[0] == (token == address(0) ? weth : token), "DV: INVALID_PATH");
-        require(path[path.length - 1] == rewardToken, "DV: INVALID_PATH");
+        revertIfInvalidPath(path[0] == (token == address(0) ? weth : token));
+        revertIfInvalidPath(path[path.length - 1] == rewardToken);
 
         uint256 amount = claimableDividends(token, msg.sender, gauges, toIndices);
         for (uint256 i; i < gauges.length; ) {
