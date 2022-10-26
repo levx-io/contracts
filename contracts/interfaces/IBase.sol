@@ -6,4 +6,7 @@ interface IBase {
     error Expired();
     error Existent();
     error NonExistent();
+    error TooLate();
+    error TooEarly();
+    error InvalidAmount();
 }

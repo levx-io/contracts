@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-interface IVotingEscrow {
+import "./IBase.sol";
+
+interface IVotingEscrow is IBase {
+    error DiscountTooHigh();
+    error Discounted();
+    error NotExpired();
+    error NotPastBlock();
+
     event SetDelegate(address indexed account, bool isDelegate);
     event Deposit(
         address indexed provider,

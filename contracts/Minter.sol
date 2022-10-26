@@ -59,14 +59,6 @@ contract Minter is Base, IMinter {
         if (!success) revert InvalidTimeRange();
     }
 
-    function revertIfTooLate(bool success) internal pure {
-        if (!success) revert TooLate();
-    }
-
-    function revertIfTooSoon(bool success) internal pure {
-        if (!success) revert TooSoon();
-    }
-
     function revertIfNoAmountToMint(bool success) internal pure {
         if (!success) revert NoAmountToMint();
     }
@@ -138,7 +130,7 @@ contract Minter is Base, IMinter {
      *      Total supply becomes slightly larger if this function is called late
      */
     function updateMiningParameters() external override {
-        revertIfTooSoon(block.timestamp >= startEpochTime + rateReductionTime);
+        revertIfTooEarly(block.timestamp >= startEpochTime + rateReductionTime);
         _updateMiningParameters();
     }
 

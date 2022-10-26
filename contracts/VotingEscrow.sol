@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./base/Base.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/IVotingEscrowMigrator.sol";
 import "./interfaces/IVotingEscrowDelegate.sol";
@@ -33,7 +34,7 @@ import "./libraries/Integers.sol";
 // 0 +--------+------> time
 //       maxtime
 
-contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowMigrator {
+contract VotingEscrow is Ownable, ReentrancyGuard, Base, IVotingEscrow, IVotingEscrowMigrator {
     using SafeERC20 for IERC20;
     using Integers for int128;
     using Integers for uint256;
@@ -107,7 +108,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
     }
 
     modifier onlyDelegate {
-        require(isDelegate[msg.sender], "VE: NOT_DELEGATE");
+        revertIfForbidden(isDelegate[msg.sender]);
         _;
     }
 
@@ -116,9 +117,25 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
      */
     modifier authorized {
         if (msg.sender != tx.origin) {
-            require(isDelegate[msg.sender], "VE: CONTRACT_NOT_DELEGATE");
+            revertIfForbidden(isDelegate[msg.sender]);
         }
         _;
+    }
+
+    function revertIfDiscountTooHigh(bool success) internal pure {
+        if (!success) revert DiscountTooHigh();
+    }
+
+    function revertIfDiscounted(bool success) internal pure {
+        if (!success) revert Discounted();
+    }
+
+    function revertIfNotExpired(bool success) internal pure {
+        if (!success) revert NotExpired();
+    }
+
+    function revertIfNotPastBlock(bool success) internal pure {
+        if (!success) revert NotPastBlock();
     }
 
     function delegateLength(address addr) external view returns (uint256) {
@@ -174,8 +191,8 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
         uint256 end,
         address[] calldata delegates
     ) external override {
-        require(msg.sender == legacy, "VE: FORBIDDEN");
-        require(locked[account].amount == 0, "VE: EXISTING_LOCK_FOUND");
+        revertIfForbidden(msg.sender == legacy);
+        revertIfExistent(locked[account].amount == 0);
 
         // in case interval is different from legacy
         start = ((start + interval) / interval) * interval;
@@ -410,9 +427,9 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
     function depositFor(address _addr, uint256 _value) external override nonReentrant {
         LockedBalance memory _locked = locked[_addr];
 
-        require(_value > 0, "VE: INVALID_VALUE");
-        require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
-        require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
+        revertIfInvalidAmount(_value > 0);
+        revertIfNonExistent(_locked.amount > 0);
+        revertIfExpired(_locked.end > block.timestamp);
 
         _depositFor(_addr, _value, 0, 0, _locked, DEPOSIT_FOR_TYPE);
     }
@@ -436,11 +453,11 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
         uint256 unlock_time = ((block.timestamp + _duration) / interval) * interval; // Locktime is rounded down to a multiple of interval
         LockedBalance memory _locked = locked[_addr];
 
-        require(_value > 0, "VE: INVALID_VALUE");
-        require(_value >= _discount, "VE: DISCOUNT_TOO_HIGH");
-        require(_locked.amount == 0, "VE: EXISTING_LOCK_FOUND");
-        require(unlock_time > block.timestamp, "VE: UNLOCK_TIME_TOO_EARLY");
-        require(unlock_time <= block.timestamp + maxDuration, "VE: UNLOCK_TIME_TOO_LATE");
+        revertIfInvalidAmount(_value > 0);
+        revertIfDiscountTooHigh(_value >= _discount);
+        revertIfExistent(_locked.amount == 0);
+        revertIfTooEarly(unlock_time > block.timestamp);
+        revertIfTooLate(unlock_time <= block.timestamp + maxDuration);
 
         _depositFor(_addr, _value, _discount, unlock_time, _locked, CREATE_LOCK_TYPE);
     }
@@ -454,10 +471,10 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
         uint256 unlock_time = ((block.timestamp + _duration) / interval) * interval; // Locktime is rounded down to a multiple of interval
         LockedBalance memory _locked = locked[msg.sender];
 
-        require(_value > 0, "VE: INVALID_VALUE");
-        require(_locked.amount == 0, "VE: EXISTING_LOCK_FOUND");
-        require(unlock_time > block.timestamp, "VE: UNLOCK_TIME_TOO_EARLY");
-        require(unlock_time <= block.timestamp + maxDuration, "VE: UNLOCK_TIME_TOO_LATE");
+        revertIfInvalidAmount(_value > 0);
+        revertIfExistent(_locked.amount == 0);
+        revertIfTooEarly(unlock_time > block.timestamp);
+        revertIfTooLate(unlock_time <= block.timestamp + maxDuration);
 
         _depositFor(msg.sender, _value, 0, unlock_time, _locked, CREATE_LOCK_TYPE);
     }
@@ -478,10 +495,10 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
 
         LockedBalance memory _locked = locked[_addr];
 
-        require(_value > 0, "VE: INVALID_VALUE");
-        require(_value >= _discount, "VE: DISCOUNT_TOO_HIGH");
-        require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
-        require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
+        revertIfInvalidAmount(_value > 0);
+        revertIfDiscountTooHigh(_value >= _discount);
+        revertIfNonExistent(_locked.amount > 0);
+        revertIfExpired(_locked.end > block.timestamp);
 
         _depositFor(_addr, _value, _discount, 0, _locked, INCREASE_LOCK_AMOUNT);
     }
@@ -494,9 +511,9 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
     function increaseAmount(uint256 _value) external override nonReentrant authorized {
         LockedBalance memory _locked = locked[msg.sender];
 
-        require(_value > 0, "VE: INVALID_VALUE");
-        require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
-        require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
+        revertIfInvalidAmount(_value > 0);
+        revertIfNonExistent(_locked.amount > 0);
+        revertIfExpired(_locked.end > block.timestamp);
 
         _depositFor(msg.sender, _value, 0, 0, _locked, INCREASE_LOCK_AMOUNT);
     }
@@ -509,11 +526,11 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
         LockedBalance memory _locked = locked[msg.sender];
         uint256 unlock_time = ((_locked.end + _duration) / interval) * interval; // Locktime is rounded down to a multiple of interval
 
-        require(_locked.end > block.timestamp, "VE: LOCK_EXPIRED");
-        require(_locked.amount > 0, "VE: LOCK_NOT_FOUND");
-        require(_locked.discount == 0, "VE: LOCK_DISCOUNTED");
-        require(unlock_time >= _locked.end + interval, "VE: UNLOCK_TIME_TOO_EARLY");
-        require(unlock_time <= block.timestamp + maxDuration, "VE: UNLOCK_TIME_TOO_LATE");
+        revertIfExpired(_locked.end > block.timestamp);
+        revertIfNonExistent(_locked.amount > 0);
+        revertIfDiscounted(_locked.discount == 0); // keep this line or not?
+        revertIfTooEarly(unlock_time >= _locked.end + interval);
+        revertIfTooLate(unlock_time <= block.timestamp + maxDuration);
 
         _depositFor(msg.sender, 0, 0, unlock_time, _locked, INCREASE_UNLOCK_TIME);
     }
@@ -524,7 +541,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
      */
     function withdraw() external override nonReentrant {
         LockedBalance memory _locked = locked[msg.sender];
-        require(block.timestamp >= _locked.end, "VE: LOCK_NOT_EXPIRED");
+        revertIfNotExpired(block.timestamp >= _locked.end);
 
         uint256 value = _locked.amount.toUint256();
         uint256 discount = _locked.discount.toUint256();
@@ -612,7 +629,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
     function balanceOfAt(address addr, uint256 _block) external view override returns (uint256) {
         // Copying and pasting totalSupply code because Vyper cannot pass by
         // reference yet
-        require(_block <= block.number, "VE: PAST_BLOCK_ONLY");
+        revertIfNotPastBlock(_block <= block.number);
 
         // Binary search
         uint256 _min;
@@ -691,7 +708,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, IVotingEscrow, IVotingEscrowM
      * @return Total voting power at `_block`
      */
     function totalSupplyAt(uint256 _block) external view override returns (uint256) {
-        require(_block <= block.number, "VE: PAST_BLOCK_ONLY");
+        revertIfNotPastBlock(_block <= block.number);
         uint256 _epoch = epoch;
         uint256 target_epoch = _findBlockEpoch(_block, _epoch);
 

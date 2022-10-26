@@ -5,8 +5,6 @@ import "./IBase.sol";
 
 interface IMinter is IBase {
     error InvalidTimeRange();
-    error TooLate();
-    error TooSoon();
     error NoAmountToMint();
 
     event UpdateMiningParameters(uint256 time, uint256 rate, uint256 supply);

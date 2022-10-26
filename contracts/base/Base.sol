@@ -19,4 +19,16 @@ abstract contract Base is IBase {
     function revertIfNonExistent(bool success) internal pure {
         if (!success) revert NonExistent();
     }
+
+    function revertIfTooLate(bool success) internal pure {
+        if (!success) revert TooLate();
+    }
+
+    function revertIfTooEarly(bool success) internal pure {
+        if (!success) revert TooEarly();
+    }
+
+    function revertIfInvalidAmount(bool success) internal pure {
+        if (!success) revert InvalidAmount();
+    }
 }
