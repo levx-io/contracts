@@ -4,9 +4,10 @@ pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import "./Base.sol";
 import "../interfaces/IERC721NonTransferable.sol";
 
-abstract contract ERC721NonTransferable is Initializable, ERC165, IERC721NonTransferable {
+abstract contract ERC721NonTransferable is Initializable, ERC165, Base, IERC721NonTransferable {
     // Token name
     string private _name;
 
@@ -31,6 +32,14 @@ abstract contract ERC721NonTransferable is Initializable, ERC165, IERC721NonTran
         _symbol = symbol_;
     }
 
+    function revertIfInvalidRecipient(bool success) internal pure {
+        if (!success) revert InvalidRecipient();
+    }
+
+    function revertIfAlreadyMinted(bool success) internal pure {
+        if (!success) revert AlreadyMinted();
+    }
+
     /**
      * @dev See {IERC165-supportsInterface}.
      */
@@ -42,7 +51,7 @@ abstract contract ERC721NonTransferable is Initializable, ERC165, IERC721NonTran
      * @dev See {IERC721-balanceOf}.
      */
     function balanceOf(address owner) public view virtual override returns (uint256) {
-        require(owner != address(0), "ERC721: INVALID_OWNER");
+        revertIfForbidden(owner != address(0));
         return _balances[owner];
     }
 
@@ -99,8 +108,8 @@ abstract contract ERC721NonTransferable is Initializable, ERC165, IERC721NonTran
      * Emits a {Transfer} event.
      */
     function _mint(address to, uint256 tokenId) internal virtual {
-        require(to != address(0), "ERC721: INVALID_TO");
-        require(!_exists(tokenId), "ERC721: ALREADY_MINTED");
+        revertIfInvalidRecipient(to != address(0));
+        revertIfAlreadyMinted(!_exists(tokenId));
 
         _beforeTokenTransfer(address(0), to, tokenId);
 
@@ -122,7 +131,7 @@ abstract contract ERC721NonTransferable is Initializable, ERC165, IERC721NonTran
      */
     function _burn(uint256 tokenId) internal virtual {
         address owner = ERC721NonTransferable.ownerOf(tokenId);
-        require(owner != address(0), "ERC721: INVALID_TOKEN_ID");
+        revertIfForbidden(owner != address(0));
 
         _beforeTokenTransfer(owner, address(0), tokenId);
 
@@ -148,8 +157,8 @@ abstract contract ERC721NonTransferable is Initializable, ERC165, IERC721NonTran
         address to,
         uint256 tokenId
     ) internal virtual {
-        require(ERC721NonTransferable.ownerOf(tokenId) == from, "ERC721: TRANSFER_FORBIDDEN");
-        require(to != address(0), "ERC721: INVALID_RECIPIENT");
+        revertIfForbidden(ERC721NonTransferable.ownerOf(tokenId) == from);
+        revertIfInvalidRecipient(to != address(0));
 
         _beforeTokenTransfer(from, to, tokenId);
 

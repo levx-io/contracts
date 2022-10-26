@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "./Errors.sol";
-
 library Integers {
+    error OutOfRange();
+
     function toInt128(uint256 u) internal pure returns (int128) {
         revertIfOutOfRange(u <= uint256(uint128(type(int128).max)));
         return int128(int256(u));
@@ -17,5 +17,9 @@ library Integers {
     function toUint256(int128 i) internal pure returns (uint256) {
         revertIfOutOfRange(i >= 0);
         return uint256(uint128(i));
+    }
+
+    function revertIfOutOfRange(bool success) internal pure {
+        if (!success) revert OutOfRange();
     }
 }

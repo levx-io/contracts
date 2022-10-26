@@ -3,8 +3,12 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import "./IBase.sol";
 
-interface IERC721NonTransferable is IERC165 {
+interface IERC721NonTransferable is IERC165, IBase {
+    error InvalidRecipient();
+    error AlreadyMinted();
+
     /**
      * @dev Emitted when `tokenId` token is transferred from `from` to `to`.
      */

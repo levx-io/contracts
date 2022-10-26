@@ -9,7 +9,6 @@ import "../interfaces/IWrappedERC721.sol";
 import "../interfaces/INFTGaugeFactory.sol";
 import "../libraries/Tokens.sol";
 import "../libraries/Math.sol";
-import "../libraries/Errors.sol";
 
 abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrappedERC721 {
     using Strings for uint256;
@@ -54,6 +53,46 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
             symbol = "WNFT";
         }
         __ERC721_init(string(abi.encodePacked("Wrapped ", name)), symbol);
+    }
+
+    function revertIfNonExistent(bool success) internal pure {
+        if (!success) revert NonExistent();
+    }
+
+    function revertIfInvalidDeadline(bool success) internal pure {
+        if (!success) revert InvalidDeadline();
+    }
+
+    function revertIfInvalidCurrency(bool success) internal pure {
+        if (!success) revert InvalidCurrency();
+    }
+
+    function revertIfInvalidOffer(bool success) internal pure {
+        if (!success) revert InvalidOffer();
+    }
+
+    function revertIfNotListed(bool success) internal pure {
+        if (!success) revert NotListed();
+    }
+
+    function revertIfInvalidPrice(bool success) internal pure {
+        if (!success) revert InvalidPrice();
+    }
+
+    function revertIfAuction(bool success) internal pure {
+        if (!success) revert Auction();
+    }
+
+    function revertIfNotAuction(bool success) internal pure {
+        if (!success) revert NotAuction();
+    }
+
+    function revertIfBidInProgress(bool success) internal pure {
+        if (!success) revert BidInProgress();
+    }
+
+    function revertIfPriceTooLow(bool success) internal pure {
+        if (!success) revert PriceTooLow();
     }
 
     function tokenURI(uint256 tokenId)

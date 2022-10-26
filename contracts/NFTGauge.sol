@@ -10,10 +10,7 @@ import "./interfaces/IMinter.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/IFeeVault.sol";
 import "./interfaces/IDividendVault.sol";
-import "./libraries/Tokens.sol";
-import "./libraries/Math.sol";
 import "./libraries/NFTs.sol";
-import "./libraries/Errors.sol";
 
 contract NFTGauge is WrappedERC721, INFTGauge {
     struct Point {
@@ -79,6 +76,18 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         try IERC165(_nftContract).supportsInterface(0x2a55205a) returns (bool success) {
             _supportsERC2981 = success;
         } catch {}
+    }
+
+    function revertIfInvalidDividendRatio(bool success) internal pure {
+        if (!success) revert InvalidDividendRatio();
+    }
+
+    function revertIfExistent(bool success) internal pure {
+        if (!success) revert Existent();
+    }
+
+    function revertIfVotedTooEarly(bool success) internal pure {
+        if (!success) revert VotedTooEarly();
     }
 
     function integrateCheckpoint() external view override returns (uint256) {
