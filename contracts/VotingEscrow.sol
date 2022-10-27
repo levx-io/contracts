@@ -174,7 +174,7 @@ contract VotingEscrow is Ownable, ReentrancyGuard, Base, IVotingEscrow, IVotingE
     function setDelegateOfLegacy(address _legacy, address delegate) external onlyOwner {
         delegateOfLegacy[_legacy] = delegate;
 
-        emit SetDelegateOfLegacy(legacy, delegate);
+        emit SetDelegateOfLegacy(_legacy, delegate);
     }
 
     function setDelegate(address account, bool _isDelegate) external override onlyOwner {
