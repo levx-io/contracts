@@ -278,37 +278,33 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     function vote(uint256 tokenId, uint256 voteUserWeight) public override {
-        revertIfNonExistent(_exists(tokenId));
-        revertIfVotedTooEarly(block.timestamp >= lastUserVote[tokenId][msg.sender] + _weightVoteDelay);
-
-        userCheckpoint(tokenId, msg.sender);
-
         address escrow = votingEscrow;
         uint256 slope = uint256(uint128(IVotingEscrow(escrow).getLastUserSlope(msg.sender)));
         uint256 lockEnd = IVotingEscrow(escrow).unlockTime(msg.sender);
 
-        uint256 powerUsed = _updateSlopes(tokenId, msg.sender, slope, lockEnd, voteUserWeight);
-        IGaugeController(controller).voteForGaugeWeights(msg.sender, powerUsed);
+        _voteFor(tokenId, msg.sender, slope, lockEnd, voteUserWeight);
+    }
 
-        // Record last action time
-        lastUserVote[tokenId][msg.sender] = block.timestamp;
+    function voteFor(
+        uint256 tokenId,
+        address user,
+        uint256 slope,
+        uint256 lockEnd,
+        uint256 voteUserWeight
+    ) external override {
+        revertIfForbidden(INFTGaugeFactory(factory).isDelegate(msg.sender));
 
-        emit Vote(tokenId, msg.sender, voteUserWeight);
+        _voteFor(tokenId, user, slope, lockEnd, voteUserWeight);
     }
 
     function revoke(uint256 tokenId) public override {
-        revertIfExistent(!_exists(tokenId));
-        revertIfVotedTooEarly(block.timestamp >= lastUserVote[tokenId][msg.sender] + _weightVoteDelay);
+        _revokeFor(tokenId, msg.sender);
+    }
 
-        userCheckpoint(tokenId, msg.sender);
+    function revokeFor(uint256 tokenId, address user) external override {
+        revertIfForbidden(INFTGaugeFactory(factory).isDelegate(msg.sender));
 
-        uint256 powerUsed = _updateSlopes(tokenId, msg.sender, 0, 0, 0);
-        IGaugeController(controller).voteForGaugeWeights(msg.sender, powerUsed);
-
-        // Record last action time
-        lastUserVote[tokenId][msg.sender] = block.timestamp;
-
-        emit Vote(tokenId, msg.sender, 0);
+        _revokeFor(tokenId, user);
     }
 
     /**
@@ -374,6 +370,42 @@ contract NFTGauge is WrappedERC721, INFTGauge {
             }
             return pt.bias;
         } else return 0;
+    }
+
+    function _voteFor(
+        uint256 tokenId,
+        address user,
+        uint256 slope,
+        uint256 lockEnd,
+        uint256 voteUserWeight
+    ) internal {
+        revertIfNonExistent(_exists(tokenId));
+        revertIfVotedTooEarly(block.timestamp >= lastUserVote[tokenId][user] + _weightVoteDelay);
+
+        userCheckpoint(tokenId, user);
+
+        uint256 powerUsed = _updateSlopes(tokenId, user, slope, lockEnd, voteUserWeight);
+        IGaugeController(controller).voteForGaugeWeights(user, powerUsed);
+
+        // Record last action time
+        lastUserVote[tokenId][user] = block.timestamp;
+
+        emit VoteFor(tokenId, user, voteUserWeight);
+    }
+
+    function _revokeFor(uint256 tokenId, address user) internal {
+        revertIfExistent(!_exists(tokenId));
+        revertIfVotedTooEarly(block.timestamp >= lastUserVote[tokenId][user] + _weightVoteDelay);
+
+        userCheckpoint(tokenId, user);
+
+        uint256 powerUsed = _updateSlopes(tokenId, user, 0, 0, 0);
+        IGaugeController(controller).voteForGaugeWeights(user, powerUsed);
+
+        // Record last action time
+        lastUserVote[tokenId][user] = block.timestamp;
+
+        emit VoteFor(tokenId, user, 0);
     }
 
     function _updateSlopes(

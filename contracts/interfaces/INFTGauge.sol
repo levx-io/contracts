@@ -9,7 +9,7 @@ interface INFTGauge is IWrappedERC721 {
 
     event Wrap(uint256 indexed tokenId, address indexed to);
     event Unwrap(uint256 indexed tokenId, address indexed to);
-    event Vote(uint256 indexed tokenId, address indexed user, uint256 weight);
+    event VoteFor(uint256 indexed tokenId, address indexed user, uint256 weight);
 
     function initialize(address _nftContract, address _minter) external;
 
@@ -80,5 +80,15 @@ interface INFTGauge is IWrappedERC721 {
 
     function vote(uint256 tokenId, uint256 userWeight) external;
 
+    function voteFor(
+        uint256 tokenId,
+        address user,
+        uint256 slope,
+        uint256 lockEnd,
+        uint256 voteUserWeight
+    ) external;
+
     function revoke(uint256 tokenId) external;
+
+    function revokeFor(uint256 tokenId, address user) external;
 }

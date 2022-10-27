@@ -30,6 +30,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
     mapping(address => bool) public override currencyWhitelisted;
     mapping(address => address) public override gauges;
     mapping(address => bool) public override isGauge;
+    mapping(address => bool) public override isDelegate;
 
     constructor(
         address _weth,
@@ -127,6 +128,12 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
         ownerAdvantageRatio = ratio;
 
         emit UpdateOwnerAdvantageRatio(ratio);
+    }
+
+    function setDelegate(address account, bool _isDelegate) external override onlyOwner {
+        isDelegate[account] = _isDelegate;
+
+        emit SetDelegate(account, _isDelegate);
     }
 
     /**
