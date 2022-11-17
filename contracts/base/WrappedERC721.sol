@@ -35,7 +35,7 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
 
     address internal _weth;
 
-    function __WrappedERC721_init(address _nftContract) internal initializer {
+    function __WrappedERC721_init(address _nftContract) internal onlyInitializing {
         nftContract = _nftContract;
         factory = msg.sender;
 

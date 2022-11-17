@@ -65,21 +65,24 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     bool internal _supportsERC2981;
 
     function initialize(address _nftContract, address _minter) external override initializer {
-        __WrappedERC721_init(_nftContract);
+        if (_nftContract != address(0)) {
+            __WrappedERC721_init(_nftContract);
+            try IERC165(_nftContract).supportsInterface(0x2a55205a) returns (bool success) {
+                _supportsERC2981 = success;
+            } catch {}
+        }
 
-        minter = _minter;
-        address _controller = IMinter(_minter).controller();
-        controller = _controller;
-        votingEscrow = IGaugeController(_controller).votingEscrow();
-        periodTimestamp[0] = block.timestamp;
-        _inflationRate = IMinter(_minter).rate();
-        _futureEpochTime = IMinter(_minter).futureEpochTimeWrite();
-        _interval = IGaugeController(_controller).interval();
-        _weightVoteDelay = IGaugeController(_controller).weightVoteDelay();
-
-        try IERC165(_nftContract).supportsInterface(0x2a55205a) returns (bool success) {
-            _supportsERC2981 = success;
-        } catch {}
+        if (_minter != address(0)) {
+            minter = _minter;
+            address _controller = IMinter(_minter).controller();
+            controller = _controller;
+            votingEscrow = IGaugeController(_controller).votingEscrow();
+            periodTimestamp[0] = block.timestamp;
+            _inflationRate = IMinter(_minter).rate();
+            _futureEpochTime = IMinter(_minter).futureEpochTimeWrite();
+            _interval = IGaugeController(_controller).interval();
+            _weightVoteDelay = IGaugeController(_controller).weightVoteDelay();
+        }
     }
 
     function revertIfInvalidDividendRatio(bool success) internal pure {
@@ -117,9 +120,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     /**
      * @notice Toggle the killed status of the gauge
      */
-    function killMe() external override {
+    function setKilled(bool killed) external override {
         revertIfForbidden(msg.sender == factory);
-        isKilled = !isKilled;
+        _checkpoint();
+        isKilled = killed;
     }
 
     /**

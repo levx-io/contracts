@@ -8,7 +8,8 @@ interface INFTGaugeFactory is IBase {
     error InvalidOwnerAdvantageRatio();
     error NonWhitelistedCurrency();
 
-    event CreateNFTGauge(address indexed nftContract, address indexed gauge);
+    event CreateNFTGauge(address indexed nftContract, address indexed oldGauge, address indexed gauge);
+    event SetGaugeKilled(address indexed gauge, bool indexed killed);
     event UpdateCurrencyWhitelisted(address indexed token, bool whitelisted);
     event UpdateFeeRatio(uint256 ratio);
     event UpdateOwnerAdvantageRatio(uint256 ratio);
@@ -40,7 +41,7 @@ interface INFTGaugeFactory is IBase {
 
     function calculateFee(address token, uint256 amount) external view returns (uint256);
 
-    function killGauge(address addr) external;
+    function setGaugeKilled(address addr, bool killed) external;
 
     function updateCurrencyWhitelisted(address token, bool whitelisted) external;
 

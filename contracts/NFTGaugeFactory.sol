@@ -3,10 +3,12 @@ pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+import "hardhat/console.sol";
 import "./base/CloneFactory.sol";
 import "./base/Base.sol";
 import "./interfaces/INFTGaugeFactory.sol";
 import "./libraries/Integers.sol";
+import "./mocks/NFTMock.sol";
 import "./NFTGauge.sol";
 
 /**
@@ -52,7 +54,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
         ownerAdvantageRatio = _ownerAdvantageRatio;
 
         NFTGauge gauge = new NFTGauge();
-        gauge.initialize(_controller, address(0));
+        gauge.initialize(address(0), address(0));
         _target = address(gauge);
 
         emit UpdateFeeRatio(_feeRatio);
@@ -88,11 +90,13 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
     }
 
     /**
-     * @notice Toggle the killed status of the gauge
+     * @notice After a gauge gets killed, it doesn't receive emissions anymore
      * @param addr Gauge address
+     * @param killed whether to kill the gauge or not
      */
-    function killGauge(address addr) external override onlyOwner {
-        NFTGauge(addr).killMe();
+    function setGaugeKilled(address addr, bool killed) external override onlyOwner {
+        NFTGauge(addr).setKilled(killed);
+        emit SetGaugeKilled(addr, killed);
     }
 
     /**
@@ -140,16 +144,19 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
      * @notice Create a new gauge that wraps `nftContract`
      * @param nftContract NFT contract address
      */
-    function createNFTGauge(address nftContract) external override returns (address gauge) {
-        revertIfExistent(gauges[nftContract] == address(0));
-
+    function createNFTGauge(address nftContract) external override onlyOwner returns (address gauge) {
         gauge = _createClone(_target);
         INFTGauge(gauge).initialize(nftContract, minter);
 
+        address oldGauge = gauges[nftContract];
+        if (oldGauge != address(0)) {
+            INFTGauge(oldGauge).setKilled(true);
+            isGauge[oldGauge] = false;
+        }
         gauges[nftContract] = gauge;
         isGauge[gauge] = true;
 
-        emit CreateNFTGauge(nftContract, gauge);
+        emit CreateNFTGauge(nftContract, oldGauge, gauge);
     }
 
     /**

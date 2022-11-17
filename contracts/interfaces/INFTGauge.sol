@@ -66,7 +66,7 @@ interface INFTGauge is IWrappedERC721 {
         uint256 timestamp
     ) external view returns (uint256);
 
-    function killMe() external;
+    function setKilled(bool killed) external;
 
     function userCheckpoint(uint256 tokenId, address user) external;
 
