@@ -6,10 +6,11 @@ import "hardhat-abi-exporter";
 import "hardhat-deploy";
 import "hardhat-gas-reporter";
 import "hardhat-spdx-license-identifier";
+import "hardhat-tracer";
 import "hardhat-watcher";
 import "solidity-coverage";
+import "@primitivefi/hardhat-dodoc";
 import "@typechain/hardhat";
-import "@tenderly/hardhat-tenderly";
 
 import { HardhatUserConfig, task } from "hardhat/config";
 
@@ -36,6 +37,9 @@ const config: HardhatUserConfig = {
         spacing: 2,
     },
     defaultNetwork: "hardhat",
+    dodoc: {
+        exclude: ["hardhat/", "@openzeppelin/", "contracts/mocks"],
+    },
     etherscan: {
         apiKey: process.env.ETHERSCAN_API_KEY,
     },
@@ -83,14 +87,6 @@ const config: HardhatUserConfig = {
             saveDeployments: true,
             tags: ["production"],
         },
-        ropsten: {
-            url: `https://ropsten.infura.io/v3/${process.env.INFURA_API_KEY}`,
-            accounts,
-            chainId: 3,
-            live: true,
-            saveDeployments: true,
-            tags: ["staging"],
-        },
         goerli: {
             url: `https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`,
             accounts,
@@ -99,70 +95,98 @@ const config: HardhatUserConfig = {
             saveDeployments: true,
             tags: ["staging"],
         },
-        kovan: {
-            url: `https://kovan.infura.io/v3/${process.env.INFURA_API_KEY}`,
+        bsc: {
+            url: `https://bsc-dataseed1.binance.org`,
             accounts,
-            chainId: 42,
+            chainId: 56,
+            live: true,
+            saveDeployments: true,
+            tags: ["production"],
+        },
+        "bsc-testnet": {
+            url: `https://data-seed-prebsc-2-s1.binance.org:8545`,
+            accounts,
+            chainId: 97,
             live: true,
             saveDeployments: true,
             tags: ["staging"],
         },
-        moonbase: {
-            url: "https://rpc.testnet.moonbeam.network",
+        polygon: {
+            url: `https://polygon-mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
             accounts,
-            chainId: 1287,
+            chainId: 137,
+            live: true,
+            saveDeployments: true,
+            tags: ["production"],
+        },
+        mumbai: {
+            url: `https://polygon-mumbai.infura.io/v3/${process.env.INFURA_API_KEY}`,
+            accounts,
+            chainId: 80001,
+            live: true,
+            saveDeployments: true,
+            tags: ["staging"],
+        },
+        avalanche: {
+            url: `https://avalanche-mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
+            accounts,
+            chainId: 43114,
+            live: true,
+            saveDeployments: true,
+            tags: ["production"],
+        },
+        fuji: {
+            url: `https://avalanche-fuji.infura.io/v3/${process.env.INFURA_API_KEY}`,
+            accounts,
+            chainId: 43113,
+            live: true,
+            saveDeployments: true,
+            tags: ["staging"],
+        },
+        optimism: {
+            url: `https://optimism-mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
+            accounts,
+            chainId: 10,
+            live: true,
+            saveDeployments: true,
+            tags: ["production"],
+        },
+        "optimism-goerli": {
+            url: `https://optimism-goerli.infura.io/v3/${process.env.INFURA_API_KEY}`,
+            accounts,
+            chainId: 420,
             live: true,
             saveDeployments: true,
             tags: ["staging"],
         },
         arbitrum: {
-            url: "https://kovan3.arbitrum.io/rpc",
+            url: `https://arbitrum-mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
             accounts,
-            chainId: 79377087078960,
+            chainId: 42161,
+            live: true,
+            saveDeployments: true,
+            tags: ["production"],
+        },
+        "arbitrum-goerli": {
+            url: `https://arbitrum-goerli.infura.io/v3/${process.env.INFURA_API_KEY}`,
+            accounts,
+            chainId: 421613,
             live: true,
             saveDeployments: true,
             tags: ["staging"],
         },
         fantom: {
-            url: "https://rpcapi.fantom.network",
+            url: `https://rpc.testnet.fantom.network/`,
             accounts,
             chainId: 250,
             live: true,
             saveDeployments: true,
+            tags: ["production"],
         },
-        fantom_testnet: {
-            url: "https://rpc.testnet.fantom.network",
+        "fantom-testnet": {
+            url: `https://rpc.testnet.fantom.network/`,
             accounts,
             chainId: 4002,
-            live: true,
-            saveDeployments: true,
-            tags: ["staging"],
-        },
-        matic: {
-            url: "https://rpc-mainnet.maticvigil.com",
-            accounts,
-            chainId: 137,
-            live: true,
-            saveDeployments: true,
-        },
-        xdai: {
-            url: "https://rpc.xdaichain.com",
-            accounts,
-            chainId: 100,
-            live: true,
-            saveDeployments: true,
-        },
-        bsc: {
-            url: "https://bsc-dataseed.binance.org",
-            accounts,
-            chainId: 56,
-            live: true,
-            saveDeployments: true,
-        },
-        bsc_testnet: {
-            url: "https://data-seed-prebsc-2-s3.binance.org:8545",
-            accounts,
-            chainId: 97,
             live: true,
             saveDeployments: true,
             tags: ["staging"],
@@ -193,10 +217,6 @@ const config: HardhatUserConfig = {
                 },
             },
         ],
-    },
-    tenderly: {
-        project: process.env.TENDERLY_PROJECT,
-        username: process.env.TENDERLY_USERNAME,
     },
     watcher: {
         compile: {

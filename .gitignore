@@ -7,7 +7,7 @@ abis/
 artifacts/
 
 # Typechain
-typechain/
+typechain-types/
 
 # Env
 .env
@@ -16,6 +16,13 @@ typechain/
 coverage/
 coverage.json
 
+# Intellij
 .idea
 build/
 contracts/uniswapv2
+
+# ESLint
+.eslintcache
+
+# Dodoc
+docs/**/*
