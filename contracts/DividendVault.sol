@@ -28,22 +28,18 @@ contract DividendVault is Base, IDividendVault {
     address public immutable override rewardToken;
     address public immutable override swapRouter;
     address public immutable override weth;
-    uint256 internal immutable _interval;
+
+    uint256 internal constant WEEK = 7 days;
 
     mapping(address => uint256) public override balances;
     mapping(address => mapping(address => Dividend[])) public override dividends; // token -> gauge -> Dividend
     mapping(address => mapping(address => mapping(address => uint256))) public override lastDividendClaimed; // token -> gauge -> user -> index
 
-    constructor(
-        address _votingEscrow,
-        address _rewardToken,
-        address _swapRouter
-    ) {
+    constructor(address _votingEscrow, address _rewardToken, address _swapRouter) {
         votingEscrow = _votingEscrow;
         rewardToken = _rewardToken;
         swapRouter = _swapRouter;
         weth = IUniswapV2Router02(swapRouter).WETH();
-        _interval = IVotingEscrow(_votingEscrow).interval();
     }
 
     receive() external payable {
@@ -110,16 +106,12 @@ contract DividendVault is Base, IDividendVault {
      * @param gauge From which gauge dividends were generated
      * @param tokenId From which tokenId dividends were generated
      */
-    function checkpoint(
-        address token,
-        address gauge,
-        uint256 tokenId
-    ) external override {
+    function checkpoint(address token, address gauge, uint256 tokenId) external override {
         uint256 balance = Tokens.balanceOf(token, address(this));
         uint256 amount = balance - balances[token];
 
         if (amount > 0) {
-            uint256 time = (block.timestamp / _interval) * _interval;
+            uint256 time = (block.timestamp / WEEK) * WEEK;
             (uint256 sum, ) = INFTGauge(gauge).pointsSum(tokenId, time);
             if (sum > 0) {
                 dividends[token][gauge].push(Dividend(tokenId, uint64(time), ((amount * 1e18) / sum).toUint192()));

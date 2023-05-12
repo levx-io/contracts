@@ -29,11 +29,7 @@ contract FeeVault is Base, IFeeVault {
     mapping(address => Fee[]) public override fees; // token -> fees
     mapping(address => mapping(address => uint256)) public override lastFeeClaimed; // token -> user -> index
 
-    constructor(
-        address _votingEscrow,
-        address _rewardToken,
-        address _swapRouter
-    ) {
+    constructor(address _votingEscrow, address _rewardToken, address _swapRouter) {
         votingEscrow = _votingEscrow;
         rewardToken = _rewardToken;
         swapRouter = _swapRouter;
@@ -63,22 +59,16 @@ contract FeeVault is Base, IFeeVault {
      * @param user Account to check the amount of
      * @param toIndex the last index of the fee (exclusive)
      */
-    function claimableFees(
-        address token,
-        address user,
-        uint256 toIndex
-    ) public view override returns (uint256 amount) {
+    function claimableFees(address token, address user, uint256 toIndex) public view override returns (uint256 amount) {
         if (toIndex == 0) toIndex = fees[token].length;
 
-        (int128 value, , uint256 start, ) = IVotingEscrow(votingEscrow).locked(user);
+        (int128 value, ) = IVotingEscrow(votingEscrow).locked(user);
         revertIfNonExistent(value > 0);
 
         for (uint256 i = lastFeeClaimed[token][user]; i < toIndex; ) {
             Fee memory fee = fees[token][i];
-            if (start < fee.timestamp) {
-                uint256 balance = IVotingEscrow(votingEscrow).balanceOf(user, fee.timestamp);
-                if (balance > 0) amount += (balance * fee.amountPerShare) / 1e18;
-            }
+            uint256 balance = IVotingEscrow(votingEscrow).balanceOf(user, fee.timestamp);
+            if (balance > 0) amount += (balance * fee.amountPerShare) / 1e18;
             unchecked {
                 ++i;
             }

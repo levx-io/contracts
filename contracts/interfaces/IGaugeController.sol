@@ -13,10 +13,6 @@ interface IGaugeController is IBase {
     event VoteForGauge(uint256 time, address user, address addr, uint256 weight);
     event NewGauge(address addr, int128 gaugeType, uint256 weight);
 
-    function interval() external view returns (uint256);
-
-    function weightVoteDelay() external view returns (uint256);
-
     function votingEscrow() external view returns (address);
 
     function gaugeTypesLength() external view returns (int128);
@@ -27,14 +23,10 @@ interface IGaugeController is IBase {
 
     function gauges(int128 gaugeType) external view returns (address);
 
-    function voteUserSlopes(address user, address addr)
-        external
-        view
-        returns (
-            uint256 slope,
-            uint256 power,
-            uint256 end
-        );
+    function voteUserSlopes(
+        address user,
+        address addr
+    ) external view returns (uint256 slope, uint256 power, uint256 end);
 
     function voteUserPower(address user) external view returns (uint256 totalVotePower);
 
@@ -76,11 +68,7 @@ interface IGaugeController is IBase {
 
     function addGauge(address addr, int128 gaugeType) external;
 
-    function addGauge(
-        address addr,
-        int128 gaugeType,
-        uint256 weight
-    ) external;
+    function addGauge(address addr, int128 gaugeType, uint256 weight) external;
 
     function checkpoint() external;
 

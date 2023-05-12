@@ -4,28 +4,38 @@ pragma solidity ^0.8.0;
 import "./IBase.sol";
 
 interface IVotingEscrow is IBase {
-    error DiscountTooHigh();
-    error Discounted();
     error NotExpired();
     error NotPastBlock();
 
-    event SetDelegate(address indexed account, bool isDelegate);
+    event SetWhitelistedContract(address indexed account, bool isWhitelisted);
     event Deposit(
         address indexed provider,
         uint256 value,
-        uint256 discount,
         uint256 indexed unlockTime,
         int128 indexed _type,
         uint256 ts
     );
-    event Withdraw(address indexed provider, uint256 value, uint256 discount, uint256 ts);
+    event Withdraw(address indexed provider, uint256 value, uint256 ts);
     event Supply(uint256 prevSupply, uint256 supply);
 
-    function interval() external view returns (uint256);
-
-    function maxDuration() external view returns (uint256);
-
     function token() external view returns (address);
+
+    function supply() external view returns (uint256);
+
+    function locked(address account) external view returns (int128 amount, uint256 end);
+
+    function epoch() external view returns (uint256);
+
+    function pointHistory(uint256 epoch) external view returns (int128 bias, int128 slope, uint256 ts, uint256 blk);
+
+    function userPointHistory(
+        address account,
+        uint256 epoch
+    ) external view returns (int128 bias, int128 slope, uint256 ts, uint256 blk);
+
+    function userPointEpoch(address account) external view returns (uint256);
+
+    function slopeChanges(uint256 epoch) external view returns (int128);
 
     function name() external view returns (string memory);
 
@@ -33,49 +43,7 @@ interface IVotingEscrow is IBase {
 
     function decimals() external view returns (uint8);
 
-    function isDelegate(address account) external view returns (bool);
-
-    function supply() external view returns (uint256);
-
-    function delegateAt(address account, uint256 index) external view returns (address);
-
-    function locked(address account)
-        external
-        view
-        returns (
-            int128 amount,
-            int128 discount,
-            uint256 start,
-            uint256 end
-        );
-
-    function epoch() external view returns (uint256);
-
-    function pointHistory(uint256 epoch)
-        external
-        view
-        returns (
-            int128 bias,
-            int128 slope,
-            uint256 ts,
-            uint256 blk
-        );
-
-    function userPointHistory(address account, uint256 epoch)
-        external
-        view
-        returns (
-            int128 bias,
-            int128 slope,
-            uint256 ts,
-            uint256 blk
-        );
-
-    function userPointEpoch(address account) external view returns (uint256);
-
-    function slopeChanges(uint256 epoch) external view returns (int128);
-
-    function delegateLength(address addr) external view returns (uint256);
+    function isWhitelistedContract(address account) external view returns (bool);
 
     function getLastUserSlope(address addr) external view returns (int128);
 
@@ -83,26 +51,13 @@ interface IVotingEscrow is IBase {
 
     function unlockTime(address _addr) external view returns (uint256);
 
-    function setDelegate(address account, bool _isDelegate) external;
+    function setWhitelistedContract(address account, bool isWhitelisted) external;
 
     function checkpoint() external;
 
     function depositFor(address _addr, uint256 _value) external;
 
-    function createLockFor(
-        address _addr,
-        uint256 _value,
-        uint256 _discount,
-        uint256 _duration
-    ) external;
-
     function createLock(uint256 _value, uint256 _duration) external;
-
-    function increaseAmountFor(
-        address _addr,
-        uint256 _value,
-        uint256 _discount
-    ) external;
 
     function increaseAmount(uint256 _value) external;
 

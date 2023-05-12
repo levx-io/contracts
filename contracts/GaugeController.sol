@@ -26,9 +26,8 @@ contract GaugeController is Ownable, Base, IGaugeController {
     }
 
     uint256 internal constant MULTIPLIER = 1e18;
+    uint256 internal constant WEEK = 7 days;
 
-    uint256 public immutable override interval;
-    uint256 public immutable override weightVoteDelay;
     address public immutable override votingEscrow;
 
     // Gauge parameters
@@ -69,19 +68,11 @@ contract GaugeController is Ownable, Base, IGaugeController {
 
     /**
      * @notice Contract constructor
-     * @param _interval for how many seconds gauge weights will remain the same
-     * @param _weightVoteDelay for how many seconds weight votes cannot be changed
      * @param _votingEscrow `VotingEscrow` contract address
      */
-    constructor(
-        uint256 _interval,
-        uint256 _weightVoteDelay,
-        address _votingEscrow
-    ) {
-        interval = _interval;
-        weightVoteDelay = _weightVoteDelay;
+    constructor(address _votingEscrow) {
         votingEscrow = _votingEscrow;
-        timeTotal = (block.timestamp / _interval) * _interval;
+        timeTotal = (block.timestamp / WEEK) * WEEK;
     }
 
     function revertIfInvalidGaugeType(bool success) internal pure {
@@ -213,11 +204,7 @@ contract GaugeController is Ownable, Base, IGaugeController {
      * @param gaugeType Gauge type
      * @param weight Gauge weight
      */
-    function addGauge(
-        address addr,
-        int128 gaugeType,
-        uint256 weight
-    ) public override onlyOwner {
+    function addGauge(address addr, int128 gaugeType, uint256 weight) public override onlyOwner {
         revertIfInvalidGaugeType((gaugeType >= 0) && (gaugeType < gaugeTypesLength));
         revertIfExistent(_gaugeTypes[addr] == 0);
 
@@ -226,8 +213,7 @@ contract GaugeController is Ownable, Base, IGaugeController {
         gauges[n] = addr;
 
         _gaugeTypes[addr] = gaugeType + 1;
-        uint256 _interval = interval;
-        uint256 nextTime = ((block.timestamp + _interval) / _interval) * _interval;
+        uint256 nextTime = ((block.timestamp + WEEK) / WEEK) * WEEK;
 
         if (weight > 0) {
             uint256 typeWeight = _getTypeWeight(gaugeType);
@@ -298,8 +284,7 @@ contract GaugeController is Ownable, Base, IGaugeController {
         address escrow = votingEscrow;
         uint256 slope = uint256(uint128(IVotingEscrow(escrow).getLastUserSlope(user)));
         uint256 lockEnd = IVotingEscrow(escrow).unlockTime(user);
-        uint256 _interval = interval;
-        uint256 nextTime = ((block.timestamp + _interval) / _interval) * _interval;
+        uint256 nextTime = ((block.timestamp + WEEK) / WEEK) * WEEK;
         revertIfExpired(lockEnd > nextTime);
         revertIfInvalidVotingPower((userWeight >= 0) && (userWeight <= 10000));
 
@@ -360,8 +345,7 @@ contract GaugeController is Ownable, Base, IGaugeController {
      * @return Value of relative weight normalized to 1e18
      */
     function _gaugeRelativeWeight(address addr, uint256 time) internal view returns (uint256) {
-        uint256 _interval = interval;
-        uint256 t = (time / _interval) * _interval;
+        uint256 t = (time / WEEK) * WEEK;
         uint256 totalWeight = pointsTotal[t];
 
         if (totalWeight > 0) {
@@ -381,8 +365,7 @@ contract GaugeController is Ownable, Base, IGaugeController {
         uint256 oldWeight = _getTypeWeight(gaugeType);
         uint256 oldSum = _getSum(gaugeType);
         uint256 totalWeight = _getTotal();
-        uint256 _interval = interval;
-        uint256 nextTime = ((block.timestamp + _interval) / _interval) * _interval;
+        uint256 nextTime = ((block.timestamp + WEEK) / WEEK) * WEEK;
 
         totalWeight = totalWeight + oldSum * weight - oldSum * oldWeight;
         pointsTotal[nextTime] = totalWeight;
@@ -399,11 +382,10 @@ contract GaugeController is Ownable, Base, IGaugeController {
      * @return Total weight
      */
     function _getTotal() internal returns (uint256) {
-        uint256 _interval = interval;
         uint256 t = timeTotal;
         int128 nGaugeTypes = gaugeTypesLength;
         // If we have already checkpointed - still need to change the value
-        if (t > block.timestamp) t -= _interval;
+        if (t > block.timestamp) t -= WEEK;
         uint256 pt = pointsTotal[t];
 
         for (int128 gaugeType; gaugeType < 300; ) {
@@ -418,7 +400,7 @@ contract GaugeController is Ownable, Base, IGaugeController {
 
         for (uint256 i; i < 500; ) {
             if (t > block.timestamp) break;
-            t += _interval;
+            t += WEEK;
             pt = 0;
             // Scales as n_types * n_unchecked_weeks (hopefully 1 at most)
             for (int128 gaugeType; gaugeType < 300; ) {
@@ -452,11 +434,10 @@ contract GaugeController is Ownable, Base, IGaugeController {
         uint256 t = timeSum[gaugeType];
         if (t > 0) {
             Point memory pt = pointsSum[gaugeType][t];
-            uint256 _interval = interval;
             for (uint256 i; i < 500; ) {
                 if (t > block.timestamp) break;
-                t += _interval;
-                uint256 dBias = pt.slope * _interval;
+                t += WEEK;
+                uint256 dBias = pt.slope * WEEK;
                 if (pt.bias > dBias) {
                     pt.bias -= dBias;
                     uint256 dSlope = _changesSum[gaugeType][t];
@@ -486,10 +467,9 @@ contract GaugeController is Ownable, Base, IGaugeController {
         uint256 t = timeTypeWeight[gaugeType];
         if (t > 0) {
             uint256 w = pointsTypeWeight[gaugeType][t];
-            uint256 _interval = interval;
             for (uint256 i; i < 500; ) {
                 if (t > block.timestamp) break;
-                t += _interval;
+                t += WEEK;
                 pointsTypeWeight[gaugeType][t] = w;
                 if (t > block.timestamp) timeTypeWeight[gaugeType] = t;
 
@@ -511,11 +491,10 @@ contract GaugeController is Ownable, Base, IGaugeController {
         uint256 t = timeWeight[addr];
         if (t > 0) {
             Point memory pt = pointsWeight[addr][t];
-            uint256 _interval = interval;
             for (uint256 i; i < 500; ) {
                 if (t > block.timestamp) break;
-                t += _interval;
-                uint256 dBias = pt.slope * _interval;
+                t += WEEK;
+                uint256 dBias = pt.slope * WEEK;
                 if (pt.bias > dBias) {
                     pt.bias -= dBias;
                     uint256 dSlope = _changesWeight[addr][t];

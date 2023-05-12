@@ -35,6 +35,9 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint64 end;
     }
 
+    uint256 internal constant WEEK = 7 days;
+    uint256 internal constant WEIGHT_VOTE_DELAY = 10 days;
+
     address public override minter;
     address public override controller;
     address public override votingEscrow;
@@ -60,8 +63,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     uint256 internal _futureEpochTime;
     uint256 internal _inflationRate;
-    uint256 internal _interval;
-    uint256 internal _weightVoteDelay;
     bool internal _supportsERC2981;
 
     function initialize(address _nftContract, address _minter) external override initializer {
@@ -80,8 +81,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
             periodTimestamp[0] = block.timestamp;
             _inflationRate = IMinter(_minter).rate();
             _futureEpochTime = IMinter(_minter).futureEpochTimeWrite();
-            _interval = IGaugeController(_controller).interval();
-            _weightVoteDelay = IGaugeController(_controller).weightVoteDelay();
         }
     }
 
@@ -109,11 +108,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         return _lastValue(voteUserSlopes[tokenId][user]).power;
     }
 
-    function userWeightAt(
-        uint256 tokenId,
-        address user,
-        uint256 timestamp
-    ) external view override returns (uint256) {
+    function userWeightAt(uint256 tokenId, address user, uint256 timestamp) external view override returns (uint256) {
         return _getValueAt(voteUserSlopes[tokenId][user], timestamp).power;
     }
 
@@ -150,7 +145,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
                 // 2. as time goes by, the user's bias will decrease and there could be multiple _wraps
                 // 3. we'll get the user's time-weighted bias-sum only for the time being where _wraps exist
                 // 4. to get time-weighted bias-sum, we'll sum up all areas under the graph separated by each wrap
-                // 5. this won't loop too many times since each (un)wrapping needs to be done after _weightVoteDelay
+                // 5. this won't loop too many times since each (un)wrapping needs to be done after WEIGHT_VOTE_DELAY
                 for (uint256 i; i < length; ) {
                     Wrap_ memory _wrap = _wraps[tokenId][length - i - 1];
                     (uint256 start, uint256 end) = (_wrap.start, _wrap.end);
@@ -188,12 +183,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
      * @param to The owner of the newly minted wrapped NFT
      * @param voteUserWeight Weight(out of total voting power) to use for the vote (units of 0.01%).
      */
-    function wrap(
-        uint256 tokenId,
-        uint256 dividendRatio,
-        address to,
-        uint256 voteUserWeight
-    ) external override {
+    function wrap(uint256 tokenId, uint256 dividendRatio, address to, uint256 voteUserWeight) external override {
         revertIfInvalidDividendRatio(dividendRatio <= 10000);
 
         _wraps[tokenId].push(Wrap_(uint128(dividendRatio), uint64(block.timestamp), 0));
@@ -201,8 +191,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         _mint(to, tokenId);
 
         if (timeSum[tokenId] == 0) {
-            uint256 interval = _interval;
-            timeSum[tokenId] = ((block.timestamp + interval) / interval) * interval;
+            timeSum[tokenId] = ((block.timestamp + WEEK) / WEEK) * WEEK;
         }
         vote(tokenId, voteUserWeight);
 
@@ -329,11 +318,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 t = timeSum[tokenId];
         if (t > 0) {
             Point memory pt = pointsSum[tokenId][t];
-            uint256 interval = _interval;
             for (uint256 i; i < 500; ) {
                 if (t > block.timestamp) break;
-                t += interval;
-                uint256 dBias = pt.slope * interval;
+                t += WEEK;
+                uint256 dBias = pt.slope * WEEK;
                 if (pt.bias > dBias) {
                     pt.bias -= dBias;
                     uint256 dSlope = _changesSum[tokenId][t];
@@ -376,11 +364,10 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
         // Update integral of 1/total
         if (block.timestamp > _periodTime) {
-            uint256 interval = _interval;
             uint256 prevTime = _periodTime;
-            uint256 weekTime = Math.min(((_periodTime + interval) / interval) * interval, block.timestamp);
+            uint256 weekTime = Math.min(((_periodTime + WEEK) / WEEK) * WEEK, block.timestamp);
             for (uint256 i; i < 500; ) {
-                uint256 prevWeekTime = (prevTime / interval) * interval;
+                uint256 prevWeekTime = (prevTime / WEEK) * WEEK;
                 uint256 w = IGaugeController(_controller).gaugeRelativeWeight(address(this), prevWeekTime);
                 (uint256 total, ) = IGaugeController(_controller).pointsWeight(address(this), prevWeekTime);
 
@@ -402,7 +389,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
                 if (weekTime == block.timestamp) break;
                 prevTime = weekTime;
-                weekTime = Math.min(weekTime + interval, block.timestamp);
+                weekTime = Math.min(weekTime + WEEK, block.timestamp);
 
                 unchecked {
                     ++i;
@@ -416,15 +403,9 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         integrateInvSupply[_period] = _integrateInvSupply;
     }
 
-    function _voteFor(
-        uint256 tokenId,
-        address user,
-        uint256 slope,
-        uint256 lockEnd,
-        uint256 voteUserWeight
-    ) internal {
+    function _voteFor(uint256 tokenId, address user, uint256 slope, uint256 lockEnd, uint256 voteUserWeight) internal {
         revertIfNonExistent(_exists(tokenId));
-        revertIfVotedTooEarly(block.timestamp >= lastUserVote[tokenId][user] + _weightVoteDelay);
+        revertIfVotedTooEarly(block.timestamp >= lastUserVote[tokenId][user] + WEIGHT_VOTE_DELAY);
         revertIfInvalidWeight(voteUserWeight > 0);
 
         userCheckpoint(tokenId, user);
@@ -440,7 +421,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
 
     function _revokeFor(uint256 tokenId, address user) internal {
         revertIfExistent(!_exists(tokenId));
-        revertIfVotedTooEarly(block.timestamp >= lastUserVote[tokenId][user] + _weightVoteDelay);
+        revertIfVotedTooEarly(block.timestamp >= lastUserVote[tokenId][user] + WEIGHT_VOTE_DELAY);
 
         userCheckpoint(tokenId, user);
 
@@ -460,8 +441,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 lockEnd,
         uint256 voteUserWeight
     ) internal returns (uint256 powerUsed) {
-        uint256 interval = _interval;
-        uint256 nextTime = ((block.timestamp + interval) / interval) * interval;
+        uint256 nextTime = ((block.timestamp + WEEK) / WEEK) * WEEK;
 
         // Prepare slopes and biases in memory
         VotedSlope memory oldSlope = _lastValue(voteUserSlopes[tokenId][user]);
@@ -498,12 +478,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         _changesSum[tokenId][newSlope.end] += newSlope.slope;
     }
 
-    function _settle(
-        uint256 tokenId,
-        address currency,
-        address to,
-        uint256 amount
-    ) internal override {
+    function _settle(uint256 tokenId, address currency, address to, uint256 amount) internal override {
         _getSum(tokenId);
 
         address weth = _weth;
@@ -536,11 +511,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         Tokens.safeTransfer(currency, to, amount - royalty - fee - dividend, weth);
     }
 
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 tokenId
-    ) internal override {
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal override {
         super._beforeTokenTransfer(from, to, tokenId);
 
         if (from != address(0) && to != address(0)) userCheckpoint(tokenId, from);
