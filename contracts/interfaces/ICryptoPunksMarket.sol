@@ -2,11 +2,7 @@
 pragma solidity ^0.8.0;
 
 interface ICryptoPunksMarket {
-    function offerPunkForSaleToAddress(
-        uint256 punkIndex,
-        uint256 minSalePriceInWei,
-        address toAddress
-    ) external;
+    function offerPunkForSaleToAddress(uint256 punkIndex, uint256 minSalePriceInWei, address toAddress) external;
 
     function punkIndexToAddress(uint256 punkIndex) external view returns (address);
 

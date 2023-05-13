@@ -47,71 +47,38 @@ interface IWrappedERC721 is IERC721NonTransferable {
 
     function factory() external view returns (address);
 
-    function sales(uint256 tokenId, address owner)
-        external
-        view
-        returns (
-            uint256 price,
-            address currency,
-            uint64 deadline,
-            bool auction
-        );
-
-    function currentBids(uint256 tokenId, address owner)
-        external
-        view
-        returns (
-            uint256 price,
-            address bidder,
-            uint64 timestamp
-        );
-
-    function offers(uint256 tokenId, address maker)
-        external
-        view
-        returns (
-            uint256 price,
-            address currency,
-            uint64 deadline,
-            bool auction
-        );
-
-    function listForSale(
+    function sales(
         uint256 tokenId,
-        uint256 price,
-        address currency,
-        uint64 deadline,
-        bool auction
-    ) external;
+        address owner
+    ) external view returns (uint256 price, address currency, uint64 deadline, bool auction);
+
+    function currentBids(
+        uint256 tokenId,
+        address owner
+    ) external view returns (uint256 price, address bidder, uint64 timestamp);
+
+    function offers(
+        uint256 tokenId,
+        address maker
+    ) external view returns (uint256 price, address currency, uint64 deadline, bool auction);
+
+    function listForSale(uint256 tokenId, uint256 price, address currency, uint64 deadline, bool auction) external;
 
     function cancelListing(uint256 tokenId) external;
 
     function buyETH(uint256 tokenId, address owner) external payable;
 
-    function buy(
-        uint256 tokenId,
-        address owner,
-        uint256 price
-    ) external;
+    function buy(uint256 tokenId, address owner, uint256 price) external;
 
     function bidETH(uint256 tokenId, address owner) external payable;
 
-    function bid(
-        uint256 tokenId,
-        address owner,
-        uint256 price
-    ) external;
+    function bid(uint256 tokenId, address owner, uint256 price) external;
 
     function claim(uint256 tokenId, address owner) external;
 
     function makeOfferETH(uint256 tokenId, uint64 deadline) external payable;
 
-    function makeOffer(
-        uint256 tokenId,
-        uint256 price,
-        address currency,
-        uint64 deadline
-    ) external;
+    function makeOffer(uint256 tokenId, uint256 price, address currency, uint64 deadline) external;
 
     function withdrawOffer(uint256 tokenId) external;
 

@@ -4,10 +4,9 @@ pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
-import "./Base.sol";
 import "../interfaces/IERC721NonTransferable.sol";
 
-abstract contract ERC721NonTransferable is Initializable, ERC165, Base, IERC721NonTransferable {
+abstract contract ERC721NonTransferable is Initializable, ERC165, IERC721NonTransferable {
     // Token name
     string private _name;
 
@@ -28,14 +27,6 @@ abstract contract ERC721NonTransferable is Initializable, ERC165, Base, IERC721N
         _symbol = symbol_;
     }
 
-    function revertIfInvalidRecipient(bool success) internal pure {
-        if (!success) revert InvalidRecipient();
-    }
-
-    function revertIfAlreadyMinted(bool success) internal pure {
-        if (!success) revert AlreadyMinted();
-    }
-
     /**
      * @dev See {IERC165-supportsInterface}.
      */
@@ -47,7 +38,7 @@ abstract contract ERC721NonTransferable is Initializable, ERC165, Base, IERC721N
      * @dev See {IERC721-balanceOf}.
      */
     function balanceOf(address owner) public view virtual override returns (uint256) {
-        revertIfForbidden(owner != address(0));
+        if (owner == address(0)) revert Forbidden();
         return _balances[owner];
     }
 
@@ -104,8 +95,8 @@ abstract contract ERC721NonTransferable is Initializable, ERC165, Base, IERC721N
      * Emits a {Transfer} event.
      */
     function _mint(address to, uint256 tokenId) internal virtual {
-        revertIfInvalidRecipient(to != address(0));
-        revertIfAlreadyMinted(!_exists(tokenId));
+        if (to == address(0)) revert InvalidRecipient();
+        if (_exists(tokenId)) revert AlreadyMinted();
 
         _beforeTokenTransfer(address(0), to, tokenId);
 
@@ -127,7 +118,7 @@ abstract contract ERC721NonTransferable is Initializable, ERC165, Base, IERC721N
      */
     function _burn(uint256 tokenId) internal virtual {
         address owner = ERC721NonTransferable.ownerOf(tokenId);
-        revertIfForbidden(owner != address(0));
+        if (owner == address(0)) revert Forbidden();
 
         _beforeTokenTransfer(owner, address(0), tokenId);
 
@@ -148,13 +139,9 @@ abstract contract ERC721NonTransferable is Initializable, ERC165, Base, IERC721N
      *
      * Emits a {Transfer} event.
      */
-    function _transfer(
-        address from,
-        address to,
-        uint256 tokenId
-    ) internal virtual {
-        revertIfForbidden(ERC721NonTransferable.ownerOf(tokenId) == from);
-        revertIfInvalidRecipient(to != address(0));
+    function _transfer(address from, address to, uint256 tokenId) internal virtual {
+        if (ERC721NonTransferable.ownerOf(tokenId) != from) revert Forbidden();
+        if (to == address(0)) revert InvalidRecipient();
 
         _beforeTokenTransfer(from, to, tokenId);
 
@@ -180,9 +167,5 @@ abstract contract ERC721NonTransferable is Initializable, ERC165, Base, IERC721N
      *
      * To learn more about hooks, head to xref:ROOT:extending-contracts.adoc#using-hooks[Using Hooks].
      */
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 tokenId
-    ) internal virtual {}
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal virtual {}
 }

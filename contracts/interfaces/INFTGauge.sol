@@ -40,15 +40,7 @@ interface INFTGauge is IWrappedERC721 {
         uint256 tokenId,
         address user,
         uint256 index
-    )
-        external
-        view
-        returns (
-            uint256 slope,
-            uint256 power,
-            uint64 end,
-            uint64 timestamp
-        );
+    ) external view returns (uint256 slope, uint256 power, uint64 end, uint64 timestamp);
 
     function voteUserPower(address user) external view returns (uint256);
 
@@ -60,34 +52,19 @@ interface INFTGauge is IWrappedERC721 {
 
     function userWeight(uint256 tokenId, address user) external view returns (uint256);
 
-    function userWeightAt(
-        uint256 tokenId,
-        address user,
-        uint256 timestamp
-    ) external view returns (uint256);
+    function userWeightAt(uint256 tokenId, address user, uint256 timestamp) external view returns (uint256);
 
     function setKilled(bool killed) external;
 
     function userCheckpoint(uint256 tokenId, address user) external;
 
-    function wrap(
-        uint256 tokenId,
-        uint256 dividendRatio,
-        address to,
-        uint256 userWeight
-    ) external;
+    function wrap(uint256 tokenId, uint256 dividendRatio, address to, uint256 userWeight) external;
 
     function unwrap(uint256 tokenId, address to) external;
 
     function vote(uint256 tokenId, uint256 userWeight) external;
 
-    function voteFor(
-        uint256 tokenId,
-        address user,
-        uint256 slope,
-        uint256 lockEnd,
-        uint256 voteUserWeight
-    ) external;
+    function voteFor(uint256 tokenId, address user, uint256 slope, uint256 lockEnd, uint256 voteUserWeight) external;
 
     function revoke(uint256 tokenId) external;
 

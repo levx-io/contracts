@@ -40,11 +40,7 @@ interface IMinter is IBase {
 
     function mintedDevFee() external view returns (uint256);
 
-    function minted(
-        address gaugeAddr,
-        uint256 tokenId,
-        address user
-    ) external view returns (uint256);
+    function minted(address gaugeAddr, uint256 tokenId, address user) external view returns (uint256);
 
     function updateDev(address newDev) external;
 

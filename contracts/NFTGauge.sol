@@ -84,18 +84,6 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         }
     }
 
-    function revertIfInvalidDividendRatio(bool success) internal pure {
-        if (!success) revert InvalidDividendRatio();
-    }
-
-    function revertIfVotedTooEarly(bool success) internal pure {
-        if (!success) revert VotedTooEarly();
-    }
-
-    function revertIfInvalidWeight(bool success) internal pure {
-        if (!success) revert InvalidWeight();
-    }
-
     function integrateCheckpoint() external view override returns (uint256) {
         return periodTimestamp[period];
     }
@@ -116,7 +104,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
      * @notice Toggle the killed status of the gauge
      */
     function setKilled(bool killed) external override {
-        revertIfForbidden(msg.sender == factory);
+        if (msg.sender != factory) revert Forbidden();
         _checkpoint();
         isKilled = killed;
     }
@@ -127,7 +115,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
      * @param user User address
      */
     function userCheckpoint(uint256 tokenId, address user) public override {
-        revertIfForbidden(msg.sender == user || user == minter);
+        if (msg.sender != user && user != minter) revert Forbidden();
 
         (int128 _period, uint256 _integrateInvSupply) = _checkpoint();
 
@@ -184,7 +172,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
      * @param voteUserWeight Weight(out of total voting power) to use for the vote (units of 0.01%).
      */
     function wrap(uint256 tokenId, uint256 dividendRatio, address to, uint256 voteUserWeight) external override {
-        revertIfInvalidDividendRatio(dividendRatio <= 10000);
+        if (dividendRatio > 10000) revert InvalidDividendRatio();
 
         _wraps[tokenId].push(Wrap_(uint128(dividendRatio), uint64(block.timestamp), 0));
 
@@ -206,7 +194,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
      * @param to The owner of the unwrapped NFT
      */
     function unwrap(uint256 tokenId, address to) external override {
-        revertIfForbidden(ownerOf(tokenId) == msg.sender);
+        if (ownerOf(tokenId) != msg.sender) revert Forbidden();
 
         _wraps[tokenId][_wraps[tokenId].length - 1].end = uint64(block.timestamp);
 
@@ -248,7 +236,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
         uint256 lockEnd,
         uint256 voteUserWeight
     ) external override {
-        revertIfForbidden(INFTGaugeFactory(factory).isDelegate(msg.sender));
+        if (!INFTGaugeFactory(factory).isDelegate(msg.sender)) revert Forbidden();
 
         _voteFor(tokenId, user, slope, lockEnd, voteUserWeight);
     }
@@ -267,7 +255,7 @@ contract NFTGauge is WrappedERC721, INFTGauge {
      * @param user Voter
      */
     function revokeFor(uint256 tokenId, address user) external override {
-        revertIfForbidden(INFTGaugeFactory(factory).isDelegate(msg.sender));
+        if (!INFTGaugeFactory(factory).isDelegate(msg.sender)) revert Forbidden();
 
         _revokeFor(tokenId, user);
     }
@@ -404,9 +392,9 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     function _voteFor(uint256 tokenId, address user, uint256 slope, uint256 lockEnd, uint256 voteUserWeight) internal {
-        revertIfNonExistent(_exists(tokenId));
-        revertIfVotedTooEarly(block.timestamp >= lastUserVote[tokenId][user] + WEIGHT_VOTE_DELAY);
-        revertIfInvalidWeight(voteUserWeight > 0);
+        if (!_exists(tokenId)) revert NonExistent();
+        if (!block.timestamp < lastUserVote[tokenId][user] + WEIGHT_VOTE_DELAY) revert VotedTooEarly();
+        if (voteUserWeight <= 0) revert InvalidWeight();
 
         userCheckpoint(tokenId, user);
 
@@ -420,8 +408,8 @@ contract NFTGauge is WrappedERC721, INFTGauge {
     }
 
     function _revokeFor(uint256 tokenId, address user) internal {
-        revertIfExistent(!_exists(tokenId));
-        revertIfVotedTooEarly(block.timestamp >= lastUserVote[tokenId][user] + WEIGHT_VOTE_DELAY);
+        if (_exists(tokenId)) revert Existent();
+        if (block.timestamp < lastUserVote[tokenId][user] + WEIGHT_VOTE_DELAY) revert VotedTooEarly();
 
         userCheckpoint(tokenId, user);
 

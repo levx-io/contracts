@@ -10,5 +10,4 @@ interface IBase {
     error TooEarly();
     error InvalidAmount();
     error InvalidPath();
-    error OutOfRange();
 }

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./base/Base.sol";
 import "./interfaces/IDividendVault.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./interfaces/INFTGauge.sol";
@@ -15,7 +14,7 @@ import "./libraries/UniswapV2Helper.sol";
  * @title Vault for storing dividends generated from NFT trades
  * @author LevX (team@levx.io)
  */
-contract DividendVault is Base, IDividendVault {
+contract DividendVault is IDividendVault {
     using Integers for uint256;
 
     struct Dividend {
@@ -80,7 +79,7 @@ contract DividendVault is Base, IDividendVault {
         for (uint256 i; i < gauges.length; ) {
             address gauge = gauges[i];
             uint256 toIndex = toIndices[i];
-            revertIfOutOfRange(toIndex < dividends[token][gauge].length);
+            if (toIndex >= dividends[token][gauge].length) revert OutOfRange();
             if (toIndex == 0) toIndex = dividends[token][gauge].length;
 
             for (uint256 j = lastDividendClaimed[token][gauge][msg.sender]; j < toIndex; ) {
@@ -139,8 +138,8 @@ contract DividendVault is Base, IDividendVault {
         address[] calldata path,
         uint256 deadline
     ) external override {
-        revertIfInvalidPath(path[0] == (token == address(0) ? weth : token));
-        revertIfInvalidPath(path[path.length - 1] == rewardToken);
+        if (path[0] != (token == address(0) ? weth : token)) revert InvalidPath();
+        if (path[path.length - 1] != rewardToken) revert InvalidPath();
 
         uint256 amount = claimableDividends(token, msg.sender, gauges, toIndices);
         for (uint256 i; i < gauges.length; ) {

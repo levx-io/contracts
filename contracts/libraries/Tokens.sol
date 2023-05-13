@@ -15,12 +15,7 @@ library Tokens {
         }
     }
 
-    function safeTransfer(
-        address token,
-        address to,
-        uint256 amount,
-        address weth
-    ) internal {
+    function safeTransfer(address token, address to, uint256 amount, address weth) internal {
         if (token == address(0)) {
             (bool success, ) = payable(to).call{value: amount, gas: 30000}("");
             if (!success) {

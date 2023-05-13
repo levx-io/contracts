@@ -2,7 +2,6 @@
 pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./base/Base.sol";
 import "./interfaces/IFeeVault.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./libraries/Tokens.sol";
@@ -13,7 +12,7 @@ import "./libraries/UniswapV2Helper.sol";
  * @title Vault for storing fees generated from NFT trades
  * @author LevX (team@levx.io)
  */
-contract FeeVault is Base, IFeeVault {
+contract FeeVault is IFeeVault {
     using Integers for uint256;
 
     struct Fee {
@@ -63,7 +62,7 @@ contract FeeVault is Base, IFeeVault {
         if (toIndex == 0) toIndex = fees[token].length;
 
         (int128 value, ) = IVotingEscrow(votingEscrow).locked(user);
-        revertIfNonExistent(value > 0);
+        if (value <= 0) revert NonExistent();
 
         for (uint256 i = lastFeeClaimed[token][user]; i < toIndex; ) {
             Fee memory fee = fees[token][i];
@@ -109,9 +108,9 @@ contract FeeVault is Base, IFeeVault {
         address[] calldata path,
         uint256 deadline
     ) external override {
-        revertIfOutOfRange(toIndex < fees[token].length);
-        revertIfInvalidPath(path[0] == (token == address(0) ? weth : token));
-        revertIfInvalidPath(path[path.length - 1] == rewardToken);
+        if (toIndex >= fees[token].length) revert OutOfRange();
+        if (path[0] != (token == address(0) ? weth : token)) revert InvalidPath();
+        if (path[path.length - 1] != rewardToken) revert InvalidPath();
 
         uint256 amount = claimableFees(token, msg.sender, toIndex);
         lastFeeClaimed[token][msg.sender] = toIndex;

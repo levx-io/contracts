@@ -2,7 +2,6 @@
 pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./base/Base.sol";
 import "./interfaces/IGaugeController.sol";
 import "./interfaces/IVotingEscrow.sol";
 import "./libraries/Math.sol";
@@ -13,7 +12,7 @@ import "./libraries/Math.sol";
  * @notice Controls liquidity gauges and the issuance of coins through the gauges
  * @dev Ported from vyper (https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/GaugeController.vy)
  */
-contract GaugeController is Ownable, Base, IGaugeController {
+contract GaugeController is Ownable, IGaugeController {
     struct Point {
         uint256 bias;
         uint256 slope;
@@ -75,18 +74,6 @@ contract GaugeController is Ownable, Base, IGaugeController {
         timeTotal = (block.timestamp / WEEK) * WEEK;
     }
 
-    function revertIfInvalidGaugeType(bool success) internal pure {
-        if (!success) revert InvalidGaugeType();
-    }
-
-    function revertIfInvalidVotingPower(bool success) internal pure {
-        if (!success) revert InvalidVotingPower();
-    }
-
-    function revertIfAllVotingPowerUsed(bool success) internal pure {
-        if (!success) revert AllVotingPowerUsed();
-    }
-
     /**
      * @notice Get gauge type for id
      * @param addr Gauge address
@@ -94,7 +81,7 @@ contract GaugeController is Ownable, Base, IGaugeController {
      */
     function gaugeTypes(address addr) external view override returns (int128) {
         int128 gaugeType = _gaugeTypes[addr];
-        revertIfInvalidGaugeType(gaugeType != 0);
+        if (gaugeType == 0) revert InvalidGaugeType();
 
         return gaugeType - 1;
     }
@@ -205,8 +192,8 @@ contract GaugeController is Ownable, Base, IGaugeController {
      * @param weight Gauge weight
      */
     function addGauge(address addr, int128 gaugeType, uint256 weight) public override onlyOwner {
-        revertIfInvalidGaugeType((gaugeType >= 0) && (gaugeType < gaugeTypesLength));
-        revertIfExistent(_gaugeTypes[addr] == 0);
+        if ((gaugeType < 0) || (gaugeType >= gaugeTypesLength)) revert InvalidGaugeType();
+        if (_gaugeTypes[addr] != 0) revert Existent();
 
         int128 n = gaugesLength;
         gaugesLength = n + 1;
@@ -285,11 +272,11 @@ contract GaugeController is Ownable, Base, IGaugeController {
         uint256 slope = uint256(uint128(IVotingEscrow(escrow).getLastUserSlope(user)));
         uint256 lockEnd = IVotingEscrow(escrow).unlockTime(user);
         uint256 nextTime = ((block.timestamp + WEEK) / WEEK) * WEEK;
-        revertIfExpired(lockEnd > nextTime);
-        revertIfInvalidVotingPower((userWeight >= 0) && (userWeight <= 10000));
+        if (lockEnd <= nextTime) revert Expired();
+        if ((userWeight < 0) || (userWeight > 10000)) revert InvalidVotingPower();
 
         int128 gaugeType = _gaugeTypes[msg.sender] - 1;
-        revertIfNonExistent(gaugeType >= 0);
+        if (gaugeType < 0) revert NonExistent();
         // Prepare slopes and biases in memory
         VotedSlope memory oldSlope = voteUserSlopes[user][msg.sender];
         uint256 oldDt;
@@ -302,7 +289,7 @@ contract GaugeController is Ownable, Base, IGaugeController {
         uint256 powerUsed = voteUserPower[user];
         powerUsed = powerUsed + newSlope.power - oldSlope.power;
         voteUserPower[user] = powerUsed;
-        revertIfAllVotingPowerUsed(powerUsed <= 10000);
+        if (powerUsed > 10000) revert AllVotingPowerUsed();
 
         /// Remove old and schedule new slope changes
         // Remove slope changes for old slopes

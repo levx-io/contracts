@@ -55,49 +55,10 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
         __ERC721_init(string(abi.encodePacked("Wrapped ", name)), symbol);
     }
 
-    function revertIfInvalidDeadline(bool success) internal pure {
-        if (!success) revert InvalidDeadline();
-    }
-
-    function revertIfInvalidCurrency(bool success) internal pure {
-        if (!success) revert InvalidCurrency();
-    }
-
-    function revertIfInvalidOffer(bool success) internal pure {
-        if (!success) revert InvalidOffer();
-    }
-
-    function revertIfNotListed(bool success) internal pure {
-        if (!success) revert NotListed();
-    }
-
-    function revertIfInvalidPrice(bool success) internal pure {
-        if (!success) revert InvalidPrice();
-    }
-
-    function revertIfAuction(bool success) internal pure {
-        if (!success) revert Auction();
-    }
-
-    function revertIfNotAuction(bool success) internal pure {
-        if (!success) revert NotAuction();
-    }
-
-    function revertIfBidInProgress(bool success) internal pure {
-        if (!success) revert BidInProgress();
-    }
-
-    function revertIfPriceTooLow(bool success) internal pure {
-        if (!success) revert PriceTooLow();
-    }
-
-    function tokenURI(uint256 tokenId)
-        public
-        view
-        override(ERC721NonTransferable, IERC721NonTransferable)
-        returns (string memory output)
-    {
-        revertIfNonExistent(_exists(tokenId));
+    function tokenURI(
+        uint256 tokenId
+    ) public view override(ERC721NonTransferable, IERC721NonTransferable) returns (string memory output) {
+        if (!_exists(tokenId)) revert NonExistent();
 
         return IERC721NonTransferable(nftContract).tokenURI(tokenId);
     }
@@ -109,8 +70,8 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
         uint64 deadline,
         bool auction
     ) external override {
-        revertIfForbidden(ownerOf(tokenId) == msg.sender);
-        revertIfInvalidDeadline(block.timestamp < deadline);
+        if (ownerOf(tokenId) != msg.sender) revert Forbidden();
+        if (block.timestamp >= deadline) revert InvalidDeadline();
 
         sales[tokenId][msg.sender] = Order(price, currency, deadline, auction);
 
@@ -118,7 +79,7 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
     }
 
     function cancelListing(uint256 tokenId) external override {
-        revertIfForbidden(ownerOf(tokenId) == msg.sender);
+        if (ownerOf(tokenId) != msg.sender) revert Forbidden();
 
         delete sales[tokenId][msg.sender];
         delete currentBids[tokenId][msg.sender];
@@ -128,34 +89,26 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
 
     function buyETH(uint256 tokenId, address owner) external payable override {
         address currency = _buy(tokenId, owner, msg.value);
-        revertIfInvalidCurrency(currency == address(0));
+        if (currency != address(0)) revert InvalidCurrency();
 
         _settle(tokenId, address(0), owner, msg.value);
     }
 
-    function buy(
-        uint256 tokenId,
-        address owner,
-        uint256 price
-    ) external override nonReentrant {
+    function buy(uint256 tokenId, address owner, uint256 price) external override nonReentrant {
         address currency = _buy(tokenId, owner, price);
-        revertIfInvalidCurrency(currency != address(0));
+        if (currency == address(0)) revert InvalidCurrency();
 
         INFTGaugeFactory(factory).executePayment(currency, msg.sender, price);
 
         _settle(tokenId, currency, owner, price);
     }
 
-    function _buy(
-        uint256 tokenId,
-        address owner,
-        uint256 price
-    ) internal returns (address currency) {
+    function _buy(uint256 tokenId, address owner, uint256 price) internal returns (address currency) {
         Order memory sale = sales[tokenId][owner];
-        revertIfNotListed(sale.deadline > 0);
-        revertIfExpired(block.timestamp <= sale.deadline);
-        revertIfInvalidPrice(sale.price == price);
-        revertIfAuction(!sale.auction);
+        if (sale.deadline == 0) revert NotListed();
+        if (block.timestamp > sale.deadline) revert Expired();
+        if (sale.price != price) revert InvalidPrice();
+        if (sale.auction) revert Auction();
 
         _transfer(owner, msg.sender, tokenId);
 
@@ -165,38 +118,30 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
 
     function bidETH(uint256 tokenId, address owner) external payable override {
         address currency = _bid(tokenId, owner, msg.value);
-        revertIfInvalidCurrency(currency == address(0));
+        if (currency != address(0)) revert InvalidCurrency();
     }
 
-    function bid(
-        uint256 tokenId,
-        address owner,
-        uint256 price
-    ) external override nonReentrant {
+    function bid(uint256 tokenId, address owner, uint256 price) external override nonReentrant {
         address currency = _bid(tokenId, owner, price);
-        revertIfInvalidCurrency(currency != address(0));
+        if (currency == address(0)) revert InvalidCurrency();
 
         INFTGaugeFactory(factory).executePayment(currency, msg.sender, price);
     }
 
-    function _bid(
-        uint256 tokenId,
-        address owner,
-        uint256 price
-    ) internal returns (address currency) {
+    function _bid(uint256 tokenId, address owner, uint256 price) internal returns (address currency) {
         Order memory sale = sales[tokenId][owner];
         uint256 deadline = sale.deadline;
-        revertIfNotListed(deadline > 0);
-        revertIfNotAuction(sale.auction);
+        if (deadline == 0) revert NotListed();
+        if (!sale.auction) revert NotAuction();
 
         currency = sale.currency;
         Bid_ memory prevBid = currentBids[tokenId][owner];
         if (prevBid.price == 0) {
-            revertIfPriceTooLow(price >= sale.price);
-            revertIfExpired(block.timestamp <= deadline);
+            if (price < sale.price) revert PriceTooLow();
+            if (block.timestamp > deadline) revert Expired();
         } else {
-            revertIfPriceTooLow(price >= (prevBid.price * 110) / 100);
-            revertIfExpired(block.timestamp <= Math.max(deadline, prevBid.timestamp + 10 minutes));
+            if (price < (prevBid.price * 110) / 100) revert PriceTooLow();
+            if (block.timestamp > Math.max(deadline, prevBid.timestamp + 10 minutes)) revert Expired();
 
             Tokens.safeTransfer(currency, prevBid.bidder, prevBid.price, _weth);
         }
@@ -207,12 +152,12 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
 
     function claim(uint256 tokenId, address owner) external override nonReentrant {
         Order memory sale = sales[tokenId][owner];
-        revertIfNotListed(sale.deadline > 0);
-        revertIfNotAuction(sale.auction);
+        if (sale.deadline <= 0) revert NotListed();
+        if (!sale.auction) revert NotAuction();
 
         Bid_ memory currentBid = currentBids[tokenId][owner];
-        revertIfForbidden(currentBid.bidder == msg.sender);
-        revertIfBidInProgress(currentBid.timestamp + 10 minutes < block.timestamp);
+        if (currentBid.bidder != msg.sender) revert Forbidden();
+        if (currentBid.timestamp + 10 minutes >= block.timestamp) revert BidInProgress();
 
         _transfer(owner, msg.sender, tokenId);
 
@@ -231,22 +176,17 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
         address currency,
         uint64 deadline
     ) external override nonReentrant {
-        revertIfInvalidCurrency(currency != address(0));
+        if (currency == address(0)) revert InvalidCurrency();
 
         _makeOffer(tokenId, price, currency, deadline);
 
         INFTGaugeFactory(factory).executePayment(currency, msg.sender, price);
     }
 
-    function _makeOffer(
-        uint256 tokenId,
-        uint256 price,
-        address currency,
-        uint64 deadline
-    ) internal {
-        revertIfNonExistent(_exists(tokenId));
-        revertIfInvalidPrice(price > 0);
-        revertIfInvalidDeadline(block.timestamp < uint256(deadline));
+    function _makeOffer(uint256 tokenId, uint256 price, address currency, uint64 deadline) internal {
+        if (_exists(tokenId)) revert NonExistent();
+        if (price == 0) revert InvalidPrice();
+        if (block.timestamp >= uint256(deadline)) revert InvalidDeadline();
 
         Order memory offer = offers[tokenId][msg.sender];
         if (offer.deadline > 0) {
@@ -262,7 +202,7 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
 
     function withdrawOffer(uint256 tokenId) external override {
         Order memory offer = offers[tokenId][msg.sender];
-        revertIfInvalidOffer(offer.deadline > 0);
+        if (offer.deadline == 0) revert InvalidOffer();
 
         delete offers[tokenId][msg.sender];
 
@@ -272,11 +212,11 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
     }
 
     function acceptOffer(uint256 tokenId, address maker) external override nonReentrant {
-        revertIfForbidden(ownerOf(tokenId) == msg.sender);
+        if (ownerOf(tokenId) != msg.sender) revert Forbidden();
 
         Order memory offer = offers[tokenId][maker];
-        revertIfInvalidOffer(offer.deadline > 0);
-        revertIfExpired(block.timestamp <= offer.deadline);
+        if (offer.deadline == 0) revert InvalidOffer();
+        if (block.timestamp > offer.deadline) revert Expired();
 
         delete offers[tokenId][maker];
         _transfer(msg.sender, maker, tokenId);
@@ -286,18 +226,9 @@ abstract contract WrappedERC721 is ERC721NonTransferable, ReentrancyGuard, IWrap
         emit AcceptOffer(tokenId, maker, msg.sender, offer.price, offer.currency, offer.deadline);
     }
 
-    function _settle(
-        uint256 tokenId,
-        address currency,
-        address to,
-        uint256 amount
-    ) internal virtual;
+    function _settle(uint256 tokenId, address currency, address to, uint256 amount) internal virtual;
 
-    function _beforeTokenTransfer(
-        address from,
-        address,
-        uint256 tokenId
-    ) internal virtual override {
+    function _beforeTokenTransfer(address from, address, uint256 tokenId) internal virtual override {
         if (from != address(0)) {
             delete sales[tokenId][from];
             delete currentBids[tokenId][from];

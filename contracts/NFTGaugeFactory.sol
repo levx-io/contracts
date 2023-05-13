@@ -3,9 +3,7 @@ pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "hardhat/console.sol";
 import "./base/CloneFactory.sol";
-import "./base/Base.sol";
 import "./interfaces/INFTGaugeFactory.sol";
 import "./libraries/Integers.sol";
 import "./mocks/NFTMock.sol";
@@ -15,7 +13,7 @@ import "./NFTGauge.sol";
  * @title Factory for creating gauges that wrap NFTs
  * @author LevX (team@levx.io)
  */
-contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
+contract NFTGaugeFactory is CloneFactory, Ownable, INFTGaugeFactory {
     using SafeERC20 for IERC20;
 
     address public immutable override weth;
@@ -65,18 +63,6 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
         // Empty
     }
 
-    function revertIfInvalidFeeRatio(bool success) internal pure {
-        if (!success) revert InvalidFeeRatio();
-    }
-
-    function revertIfInvalidOwnerAdvantageRatio(bool success) internal pure {
-        if (!success) revert InvalidOwnerAdvantageRatio();
-    }
-
-    function revertIfNonWhitelistedCurrency(bool success) internal pure {
-        if (!success) revert NonWhitelistedCurrency();
-    }
-
     /**
      * @notice Calculate fee to be paid
      * @param token In which token the fee will be paid
@@ -115,7 +101,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
      * @param ratio New ratio
      */
     function updateFeeRatio(uint256 ratio) public override onlyOwner {
-        revertIfInvalidFeeRatio(ratio < 10000);
+        if (ratio >= 10000) revert InvalidFeeRatio();
 
         feeRatio = ratio;
 
@@ -127,7 +113,7 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
      * @param ratio New ratio
      */
     function updateOwnerAdvantageRatio(uint256 ratio) public override onlyOwner {
-        revertIfInvalidOwnerAdvantageRatio(ratio < 10000);
+        if (ratio >= 10000) revert InvalidOwnerAdvantageRatio();
 
         ownerAdvantageRatio = ratio;
 
@@ -164,13 +150,9 @@ contract NFTGaugeFactory is CloneFactory, Ownable, Base, INFTGaugeFactory {
      * @dev Caller must be a gauge
      * @param currency Token address
      */
-    function executePayment(
-        address currency,
-        address from,
-        uint256 amount
-    ) external override {
-        revertIfForbidden(isGauge[msg.sender]);
-        revertIfNonWhitelistedCurrency(currencyWhitelisted[currency]);
+    function executePayment(address currency, address from, uint256 amount) external override {
+        if (!isGauge[msg.sender]) revert Forbidden();
+        if (!currencyWhitelisted[currency]) revert NonWhitelistedCurrency();
 
         IERC20(currency).safeTransferFrom(from, msg.sender, amount);
     }

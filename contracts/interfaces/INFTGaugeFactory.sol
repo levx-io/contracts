@@ -53,9 +53,5 @@ interface INFTGaugeFactory is IBase {
 
     function createNFTGauge(address nftContract) external returns (address gauge);
 
-    function executePayment(
-        address currency,
-        address from,
-        uint256 amount
-    ) external;
+    function executePayment(address currency, address from, uint256 amount) external;
 }

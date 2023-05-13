@@ -25,11 +25,7 @@ interface IFeeVault is IBase {
 
     function claimableFees(address token, address user) external view returns (uint256 amount);
 
-    function claimableFees(
-        address token,
-        address user,
-        uint256 toIndex
-    ) external view returns (uint256 amount);
+    function claimableFees(address token, address user, uint256 toIndex) external view returns (uint256 amount);
 
     function checkpoint(address token) external;
 

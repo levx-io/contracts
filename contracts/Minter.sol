@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.17;
 
-import "./base/Base.sol";
 import "./interfaces/IMinter.sol";
 import "./interfaces/IGaugeController.sol";
 import "./interfaces/INFTGauge.sol";
@@ -14,7 +13,7 @@ interface IToken {
  * @title Token Minter
  * @author LevX (team@levx.io)
  */
-contract Minter is Base, IMinter {
+contract Minter is IMinter {
     uint256 internal constant RATE_DENOMINATOR = 1e18;
     uint256 internal constant INFLATION_DELAY = 86400;
 
@@ -59,14 +58,6 @@ contract Minter is Base, IMinter {
         startEpochSupply = initialSupply;
     }
 
-    function revertIfInvalidTimeRange(bool success) internal pure {
-        if (!success) revert InvalidTimeRange();
-    }
-
-    function revertIfNoAmountToMint(bool success) internal pure {
-        if (!success) revert NoAmountToMint();
-    }
-
     /**
      * @notice Current number of tokens in existence (claimed or unclaimed)
      */
@@ -81,7 +72,7 @@ contract Minter is Base, IMinter {
      * @return Tokens mintable from `start` till `end`
      */
     function mintableInTimeframe(uint256 start, uint256 end) external view returns (uint256) {
-        revertIfInvalidTimeRange(start <= end);
+        if (start > end) revert InvalidTimeRange();
         uint256 toMint = 0;
         uint256 currentEpochTime = startEpochTime;
         uint256 currentRate = rate;
@@ -92,7 +83,7 @@ contract Minter is Base, IMinter {
             currentRate = (currentRate * RATE_DENOMINATOR) / rateReductionCoefficient;
         }
 
-        revertIfTooLate(end <= currentEpochTime + rateReductionTime);
+        if (end > currentEpochTime + rateReductionTime) revert TooLate();
 
         // Number of rate changes MUST be less than 10,000
         for (uint256 i; i < 10000; ) {
@@ -127,7 +118,7 @@ contract Minter is Base, IMinter {
      * @param newDev new dev address
      */
     function updateDev(address newDev) external override {
-        revertIfForbidden(msg.sender == dev);
+        if (msg.sender != dev) revert Forbidden();
         dev = newDev;
         emit UpdateDev(newDev);
     }
@@ -138,7 +129,7 @@ contract Minter is Base, IMinter {
      *      Total supply becomes slightly larger if this function is called late
      */
     function updateMiningParameters() external override {
-        revertIfTooEarly(block.timestamp >= startEpochTime + rateReductionTime);
+        if (block.timestamp < startEpochTime + rateReductionTime) revert TooEarly();
         _updateMiningParameters();
     }
 
@@ -174,12 +165,12 @@ contract Minter is Base, IMinter {
      * @param tokenId tokenId
      */
     function mint(address gaugeAddr, uint256 tokenId) external override {
-        revertIfNonExistent(IGaugeController(controller).gaugeTypes(gaugeAddr) >= 0);
+        if (IGaugeController(controller).gaugeTypes(gaugeAddr) < 0) revert NonExistent();
 
         INFTGauge(gaugeAddr).userCheckpoint(tokenId, msg.sender);
         uint256 totalMint = INFTGauge(gaugeAddr).integrateFraction(tokenId, msg.sender);
         uint256 toMint = totalMint - minted[gaugeAddr][tokenId][msg.sender];
-        revertIfNoAmountToMint(toMint > 0);
+        if (toMint <= 0) revert NoAmountToMint();
 
         mintedTotal += toMint;
         minted[gaugeAddr][tokenId][msg.sender] = totalMint;
@@ -194,7 +185,7 @@ contract Minter is Base, IMinter {
     function mintDevFee() external override {
         uint256 totalMint = mintedTotal / 33;
         uint256 toMint = totalMint - mintedDevFee;
-        revertIfNoAmountToMint(toMint > 0);
+        if (toMint <= 0) revert NoAmountToMint();
 
         mintedDevFee = totalMint;
 

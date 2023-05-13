@@ -21,20 +21,9 @@ interface IDividendVault is IBase {
         address token,
         address gauge,
         uint256 id
-    )
-        external
-        view
-        returns (
-            uint256 tokenId,
-            uint64 timestamp,
-            uint192 amountPerShare
-        );
+    ) external view returns (uint256 tokenId, uint64 timestamp, uint192 amountPerShare);
 
-    function lastDividendClaimed(
-        address token,
-        address gauge,
-        address user
-    ) external view returns (uint256);
+    function lastDividendClaimed(address token, address gauge, address user) external view returns (uint256);
 
     function dividendsLength(address token, address gauge) external view returns (uint256);
 
@@ -51,11 +40,7 @@ interface IDividendVault is IBase {
         uint256[] memory toIndices
     ) external view returns (uint256 amount);
 
-    function checkpoint(
-        address token,
-        address gauge,
-        uint256 tokenId
-    ) external;
+    function checkpoint(address token, address gauge, uint256 tokenId) external;
 
     function claimDividends(
         address token,
